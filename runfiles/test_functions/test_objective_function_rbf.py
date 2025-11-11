@@ -8,9 +8,8 @@ from scipy.ndimage import gaussian_filter
 import torch
 import time
 from itertools import product
-import util.read_mat_data as rmd
-import optimizer.symmetry_operations as symOp
-import optimizer.density_transforms as dtf
+import gegd.parameter_processing.symmetry_operations as symOp
+import gegd.parameter_processing.density_transforms as dtf
 
 class custom_objective:
     def __init__(self, cuda_ind, symmetry, periodic, Nx, Ny, Ndim, brush_size, brush_shape, n_seed, N_minima, scale):
@@ -26,18 +25,14 @@ class custom_objective:
         np.random.seed()
         
         x_brush = dtf.binarize(x.T, symmetry, periodic, Nx, Ny, brush_size, brush_shape, 8, brush_size/2).T
-#        temp = x_brush[:,0].copy()
-#        x_brush[:,0] = x_brush[:,-1]
-#        x_brush[:,-1] = temp.copy()
         
         x_gbest = np.zeros((Nx*Ny, N_minima))
         for i in range(N_minima):
             x_fp = (dtf.filter_and_project(x[:,i], symmetry, periodic, Nx, Ny, brush_size, brush_size/2, 2**(i)) + 1)/2
             x_gbest[:,i] = symOp.symmetrize(x_fp, symmetry, Nx, Ny).reshape(-1)
         
-        coeff = scale*np.ones(N_minima) #*np.random.rand(N_minima)
+        coeff = scale*np.ones(N_minima)
         beta = 15*np.ones(N_minima)
-        #beta = beta[0] - (1/0.1)*np.log(coeff[0]/coeff)
         
         self.x_gbest = torch.tensor(x_gbest, dtype=torch.float64, device=self.device)
         self.coeff = torch.tensor(coeff, dtype=torch.float64, device=self.device)
@@ -48,7 +43,7 @@ class custom_objective:
         for i in range(N_minima):
             gbest_estimate[i] = self.get_cost(x_brush[:,i])
         
-        np.savez(directory[:-15] + '/results/test_obj_rbf_seed' + str(n_seed) + '_gbest', x_gbest=x_gbest, x=x, coeff=coeff, beta=beta, gbest_estimate=gbest_estimate, x_brush=x_brush)
+        np.savez(directory[:-15] + '/test_obj_rbf_seed' + str(n_seed) + '_gbest', x_gbest=x_gbest, x=x, coeff=coeff, beta=beta, gbest_estimate=gbest_estimate, x_brush=x_brush)
 
     def set_accuracy(self, sigma):
         self.sigma = sigma
@@ -56,9 +51,6 @@ class custom_objective:
     def rbf_cost(self, x):
         dist = torch.sum((self.x_gbest - x[:,None])**2, dim=0)/(self.Nx*self.Ny)
         cost = -torch.sum(self.coeff*torch.exp(-self.beta*dist))
-#        if self.sigma == 0:
-#            print(torch.argmin(dist).item(), end='', flush=True)
-#            print(' | ', end='', flush=True)
 
         return cost
 
@@ -84,7 +76,7 @@ class custom_objective:
         else:
             cost = self.rbf_cost(x)
 
-        cost = cost.detach().cpu().numpy() + self.sigma*self.gaussian_noise(x.detach().cpu().numpy()) #*np.abs(cost.detach().cpu().numpy())
+        cost = cost.detach().cpu().numpy() + self.sigma*self.gaussian_noise(x.detach().cpu().numpy())
 
         if get_grad:
             return cost, jac.reshape(-1)

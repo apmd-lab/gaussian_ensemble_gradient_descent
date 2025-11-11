@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH -o /home/minseokhwan/Ensemble_Optimization/slurm/run_optimization.log-%j
+#SBATCH -o /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/slurm/run_optimization.log-%j
 #SBATCH --partition=32core
 #SBATCH --nodelist=node4
 #SBATCH --job-name=ens_opt
@@ -12,34 +12,20 @@ export MKL_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 
 ## Test Function RBF -----------------------------------------------------
-##SBATCH --ntasks=1
-##SBATCH --cpus-per-task=48
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=32
 
-## Grayscale
-##for i in {0..9}
-##do
-##    python /home/minseokhwan/Ensemble_Optimization/run_optimization_test_functions.py --Nthreads 48 --n_seed $i --load_data 0 --optimizer 'grayscale' --upsample_ratio 1 --maxiter 500 --brush_size 7
-##done
+## TF
+##python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py --Nthreads 32 --n_seed 0 --load_data 0 --optimizer 'TF' --upsample_ratio 1 --maxiter 500 --brush_size 7
 
-## Brush
-##for i in {0..9}
-##do
-##    python /home/minseokhwan/Ensemble_Optimization/run_optimization_test_functions.py --Nthreads 32 --n_seed $i --load_data 0 --optimizer 'conventional' --upsample_ratio 1 --maxiter 500 --binary 1 --eta 0.001 --brush_size 7
-##done
+## AF_STE
+python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py --Nthreads 32 --n_seed 0 --load_data 0 --optimizer 'AF_STE' --upsample_ratio 1 --maxiter 500 --eta 0.001 --brush_size 7
 
-## Ensemble
-##for i in {0..9}
-##do
-##    python /home/minseokhwan/Ensemble_Optimization/run_optimization_test_functions.py --Nthreads 32 --n_seed $i --load_data 0 --optimizer 'ensemble' --upsample_ratio 1 --coeff_exp 20 --maxiter 500 --sigma_ensemble_max 0.01 --eta 0.0001 --brush_size 7
-##done
+## GEGD
+##python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py --Nthreads 32 --n_seed 0 --load_data 0 --optimizer 'GEGD' --upsample_ratio 1 --coeff_exp 20 --maxiter 500 --sigma_ensemble_max 0.01 --eta 0.0001 --brush_size 7
 
-##python /home/minseokhwan/Ensemble_Optimization/run_optimization_test_functions.py --Nthreads 32 --n_seed 1 --load_data 0 --optimizer 'ensemble' --upsample_ratio 1 --coeff_exp 20 --maxiter 500 --sigma_ensemble_max 0.01 --eta 0.0001 --brush_size 7
-
-## PSO
-##for i in {0..9}
-##do
-##    python /home/minseokhwan/Ensemble_Optimization/run_optimization_test_functions.py --Nthreads 32 --n_seed $i --load_data 0 --optimizer 'PSO' --upsample_ratio 1 --maxiter 500 --brush_size 7
-##done
+## AF_PSO
+##python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py --Nthreads 32 --n_seed 0 --load_data 0 --optimizer 'AF_PSO' --upsample_ratio 1 --maxiter 500 --brush_size 7
 
 ## Diffraction Grating ---------------------------------------------------
 ##SBATCH --ntasks=1
@@ -82,10 +68,10 @@ export NUMEXPR_NUM_THREADS=1
 ##done
 
 ## Integrated Bandpass Filter ---------------------------------------------------
-export QT_QPA_PLATFORM=offscreen
+##export QT_QPA_PLATFORM=offscreen
 
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=12
+##SBATCH --ntasks=1
+##SBATCH --cpus-per-task=12
 
 ## Grayscale
 ##for i in {0..4}
@@ -93,7 +79,7 @@ export QT_QPA_PLATFORM=offscreen
 ##    python /home/minseokhwan/Ensemble_Optimization/run_optimization_integrated_bandpass_filter.py --Nthreads 32 --n_seed $i --load_data 0 --optimizer 'conventional' --upsample_ratio 1 --maxiter 500 --binary 0 --eta 0.01 --brush_size 7
 ##done
 
-python /home/minseokhwan/Ensemble_Optimization/run_optimization_mode_converter.py --Nthreads 12 --n_seed 1 --load_data 0 --optimizer 'grayscale' --upsample_ratio 1 --maxiter 200 --brush_size 7
+##python /home/minseokhwan/Ensemble_Optimization/run_optimization_mode_converter.py --Nthreads 12 --n_seed 1 --load_data 0 --optimizer 'grayscale' --upsample_ratio 1 --maxiter 200 --brush_size 7
 
 ## Brush
 ##for i in {0..9}

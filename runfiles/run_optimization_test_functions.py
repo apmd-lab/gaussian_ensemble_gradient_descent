@@ -3,10 +3,7 @@ directory = os.path.dirname(os.path.realpath(__file__))
 
 import numpy as np
 import torch
-import optimizer.ensemble_optimization as ENSEMBLE
-import optimizer.grayscale_optimization as GRAY
-import optimizer.brush_optimization as BRUSH
-import optimizer.PSO as PSO
+from gegd.optimizer import TF, AF_STE, GEGD, AF_PSO
 from itertools import product
 import time
 import util.read_mat_data as rmd
@@ -52,8 +49,7 @@ covariance_type = 'constant' # structure of the covariance of the multivariate n
 t_low_fidelity = 1 # low-fidelity simulation time in seconds
 t_high_fidelity = 10 # high-fidelity simulation time in seconds
 t_iteration = t_high_fidelity*10 #15.88 # target time per optimization iteration in seconds (actual time may be slightly longer due to the brush generator)
-#Nensemble = 5 # only for ensemble
-#r_CV = int(np.round((t_iteration - Nensemble*t_high_fidelity)/(Nensemble*t_low_fidelity)))
+
 eta_mu = args.eta # NES: 0.01, ADAM: 0.01
 eta_sigma = 0.0001 # NES: 1.0, ADAM: 0.1
 coeff_exp = args.coeff_exp
@@ -101,87 +97,95 @@ cost_obj = objfun.custom_objective(cuda_ind=0,
                                    scale=2.0)
 
 n_seed = args.n_seed
-optimization_algorithm = args.optimizer # conventional / ensemble / PSO
+optimization_algorithm = args.optimizer
 
-suffix = 'test_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) + '_sigma' + str(sigma_ensemble_max) + '_coeffExp' + str(coeff_exp) + '_brush' + str(brush_size) + '_try' + str(n_seed+1)
+output_filename = 'test_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) + '_sigma' + str(sigma_ensemble_max) + '_coeffExp' + str(coeff_exp) + '_brush' + str(brush_size) + '_try' + str(n_seed+1)
 
-if optimization_algorithm == 'grayscale':
-    optimizer = GRAY.optimizer(Nx=Nx,
-                               Ny=Ny,
-                               Ntrial=Ntrial,
-                               symmetry=symmetry,
-                               periodic=periodic,
-                               padding=padding,
-                               high_fidelity_setting=high_fidelity_setting,
-                               brush_size=brush_size,
-                               upsample_ratio=upsample_ratio,
-                               cost_obj=cost_obj,
-                               Nthreads=Nthreads)
+if optimization_algorithm == 'TF':
+    optimizer = TF.optimizer(
+        Nx=Nx,
+        Ny=Ny,
+        Ntrial=Ntrial,
+        symmetry=symmetry,
+        periodic=periodic,
+        padding=padding,
+        high_fidelity_setting=high_fidelity_setting,
+        brush_size=brush_size,
+        upsample_ratio=upsample_ratio,
+        cost_obj=cost_obj,
+        Nthreads=Nthreads,
+    )
     
     T1 = time.time()
-    optimizer.run(n_seed, suffix, maxiter, beta_init=8.0, beta_ratio=2.0, n_beta=5, load_data=args.load_data)
+    optimizer.run(n_seed, output_filename, maxiter, beta_init=8.0, beta_ratio=2.0, n_beta=5, load_data=args.load_data)
     T2 = time.time()
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
-elif optimization_algorithm == 'brush':
-    optimizer = BRUSH.optimizer(Nx=Nx,
-                                Ny=Ny,
-                                Ntrial=Ntrial,
-                                symmetry=symmetry,
-                                periodic=periodic,
-                                padding=padding,
-                                high_fidelity_setting=high_fidelity_setting,
-                                brush_size=brush_size,
-                                upsample_ratio=upsample_ratio,
-                                cost_obj=cost_obj,
-                                Nthreads=Nthreads)
+elif optimization_algorithm == 'AF_STE':
+    optimizer = AF_STE.optimizer(
+        Nx=Nx,
+        Ny=Ny,
+        Ntrial=Ntrial,
+        symmetry=symmetry,
+        periodic=periodic,
+        padding=padding,
+        high_fidelity_setting=high_fidelity_setting,
+        brush_size=brush_size,
+        upsample_ratio=upsample_ratio,
+        cost_obj=cost_obj,
+        Nthreads=Nthreads,
+    )
     
     T1 = time.time()
-    optimizer.run(n_seed, suffix, maxiter, eta_ADAM=eta_ADAM, load_data=args.load_data)
+    optimizer.run(n_seed, output_filename, maxiter, eta_ADAM=eta_ADAM, load_data=args.load_data)
     T2 = time.time()
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
-elif optimization_algorithm == 'ensemble':
-    optimizer = ENSEMBLE.optimizer(Nx=Nx,
-                                   Ny=Ny,
-                                   symmetry=symmetry,
-                                   periodic=periodic,
-                                   padding=padding,
-                                   maxiter=maxiter,
-                                   t_low_fidelity=t_low_fidelity,
-                                   t_high_fidelity=t_high_fidelity,
-                                   t_iteration=t_iteration,
-                                   high_fidelity_setting=high_fidelity_setting,
-                                   low_fidelity_setting=low_fidelity_setting,
-                                   brush_size=brush_size,
-                                   sigma_ensemble_max=sigma_ensemble_max,
-                                   upsample_ratio=upsample_ratio,
-                                   covariance_type=covariance_type,
-                                   coeff_exp=coeff_exp,
-                                   cost_threshold=cost_threshold,
-                                   cost_obj=cost_obj,
-                                   Nthreads=Nthreads)
+elif optimization_algorithm == 'GEGD':
+    optimizer = GEGD.optimizer(
+        Nx=Nx,
+        Ny=Ny,
+        symmetry=symmetry,
+        periodic=periodic,
+        padding=padding,
+        maxiter=maxiter,
+        t_low_fidelity=t_low_fidelity,
+        t_high_fidelity=t_high_fidelity,
+        t_iteration=t_iteration,
+        high_fidelity_setting=high_fidelity_setting,
+        low_fidelity_setting=low_fidelity_setting,
+        brush_size=brush_size,
+        sigma_ensemble_max=sigma_ensemble_max,
+        upsample_ratio=upsample_ratio,
+        covariance_type=covariance_type,
+        coeff_exp=coeff_exp,
+        cost_threshold=cost_threshold,
+        cost_obj=cost_obj,
+        Nthreads=Nthreads,
+    )
 
     T1 = time.time()
-    optimizer.run(n_seed, suffix, optimizer='ADAM', eta_mu=eta_mu, eta_sigma=eta_sigma, load_data=args.load_data)
+    optimizer.run(n_seed, output_filename, eta_mu=eta_mu, eta_sigma=eta_sigma, load_data=args.load_data)
     T2 = time.time()
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
-elif optimization_algorithm == 'PSO':
-    optimizer = PSO.optimizer(Nx=Nx,
-                              Ny=Ny,
-                              Nswarm=Nswarm,
-                              symmetry=symmetry,
-                              periodic=periodic,
-                              padding=padding,
-                              maxiter=maxiter,
-                              high_fidelity_setting=high_fidelity_setting,
-                              brush_size=brush_size,
-                              upsample_ratio=upsample_ratio,
-                              cost_obj=cost_obj,
-                              Nthreads=Nthreads)
+elif optimization_algorithm == 'AF_PSO':
+    optimizer = AF_PSO.optimizer(
+        Nx=Nx,
+        Ny=Ny,
+        Nswarm=Nswarm,
+        symmetry=symmetry,
+        periodic=periodic,
+        padding=padding,
+        maxiter=maxiter,
+        high_fidelity_setting=high_fidelity_setting,
+        brush_size=brush_size,
+        upsample_ratio=upsample_ratio,
+        cost_obj=cost_obj,
+        Nthreads=Nthreads,
+    )
 
     T1 = time.time()
-    optimizer.run(n_seed, suffix, coeff_cognitive=coeff_cognitive, coeff_social=coeff_social, coeff_inertia=coeff_inertia, load_data=args.load_data)
+    optimizer.run(n_seed, output_filename, coeff_cognitive=coeff_cognitive, coeff_social=coeff_social, coeff_inertia=coeff_inertia, load_data=args.load_data)
     T2 = time.time()
     print('\n### Total time: ' + str(T2 - T1), flush=True)

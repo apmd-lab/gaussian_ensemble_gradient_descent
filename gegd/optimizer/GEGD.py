@@ -691,18 +691,18 @@ class optimizer:
     def save_data(self, x_bounded=None, jac_mean=None, jac_var=None, adam_iter=None, x_bounded_norm_ref=None):
         if comm.rank == 0:
             if x_bounded is None:
-                with np.load(output_filename + "_GEGD_results.npz") as data:
+                with np.load(self.output_filename + "_GEGD_results.npz") as data:
                     adam_iter = data['adam_iter']
                     x_bounded_norm_ref = data['x_bounded_norm_ref']
                 
-                with np.load(output_filename + "_GEGD_density_hist.npz") as data:
+                with np.load(self.output_filename + "_GEGD_density_hist.npz") as data:
                     x_bounded = data['x_bounded']
                     jac_mean = data['jac_mean']
                     jac_var = data['jac_var']
         
             # Customize below
             if self.Nsigma == 1:
-                np.savez(output_filename + "_GEGD_results",
+                np.savez(self.output_filename + "_GEGD_results",
                          N_high_fidelity_hist=self.N_high_fidelity_hist,
                          N_low_fidelity_hist=self.N_low_fidelity_hist,
                          var_reduction_hist=self.var_reduction_hist,
@@ -723,7 +723,7 @@ class optimizer:
                          x_bounded_norm_ref=x_bounded_norm_ref,
                          )
                          
-                np.savez(output_filename + "_GEGD_density_hist",
+                np.savez(self.output_filename + "_GEGD_density_hist",
                          x_hist=self.x_hist,
                          x_latent_hist=self.x_latent_hist,
                          best_x_hist=self.best_x_hist,
@@ -735,7 +735,7 @@ class optimizer:
                          )
             
             else:
-                np.savez(output_filename + "_GEGD_results",
+                np.savez(self.output_filename + "_GEGD_results",
                          N_high_fidelity_hist=self.N_high_fidelity_hist,
                          N_low_fidelity_hist=self.N_low_fidelity_hist,
                          var_reduction_hist=self.var_reduction_hist,
@@ -755,7 +755,7 @@ class optimizer:
                          x_bounded_norm_ref=x_bounded_norm_ref,
                          )
                          
-                np.savez(output_filename + "_GEGD_density_hist",
+                np.savez(self.output_filename + "_GEGD_density_hist",
                          x_hist=self.x_hist,
                          sigma_ensemble_hist=self.sigma_ensemble_hist,
                          sigma_fp_hist=self.sigma_fp_hist,

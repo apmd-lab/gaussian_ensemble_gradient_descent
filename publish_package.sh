@@ -4,7 +4,7 @@ source venv/bin/activate
 
 ## Install Packaging Tools
 pip install --upgrade pip
-pip install setuptools wheel twine
+pip install setuptools wheel twine numpy auditwheel # numpy is optional
 
 ## Generate Distribution Files
 python setup.py sdist bdist_wheel
@@ -30,3 +30,6 @@ deactivate
 ##         戍式式 __init__.py
 ##         戌式式 module.py
 
+## Repair Wheels if not Pure Python
+# auditwheel repair dist/*linux_x86_64.whl -w dist/
+# twine upload dist/*manylinux*.whl dist/*.tar.gz

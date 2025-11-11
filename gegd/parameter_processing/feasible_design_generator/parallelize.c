@@ -125,7 +125,7 @@ static struct PyModuleDef FeasibleGeneratorModule = {
     FeasibleGeneratorMethods
 };
 
-PyMODINIT_FUNC PyInit_FDG(void) {
+PyMODINIT_FUNC PyInit_fdg(void) {
     import_array();
     return PyModule_Create(&FeasibleGeneratorModule);
 }

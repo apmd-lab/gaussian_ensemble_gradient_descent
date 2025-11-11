@@ -236,13 +236,13 @@ class optimizer:
     
     def save_data(self, coeff_inertia=0, velocity=0, x=0, pbest_loss=0, pbest_x=0, pbest_x_bin=0):
         if comm.rank == 0:
-            np.savez(output_filename + "_AF_PSO_results",
+            np.savez(self.output_filename + "_AF_PSO_results",
                      gbest_loss_hist=self.gbest_loss_hist,
                      n_iter=self.n_iter,
                      coeff_inertia=coeff_inertia,
                      pbest_loss=pbest_loss)
                      
-            np.savez(output_filename + "_AF_PSO_density_hist",
+            np.savez(self.output_filename + "_AF_PSO_density_hist",
                      gbest_x_hist=self.gbest_x_hist,
                      gbest_x_binary_hist=self.gbest_x_binary_hist,
                      velocity=velocity,

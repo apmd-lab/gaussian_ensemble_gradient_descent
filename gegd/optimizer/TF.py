@@ -119,7 +119,7 @@ class optimizer:
         if comm.rank == 0:
             print('### Grayscale Optimization (seed = ' + str(n_seed) + ')\n', flush=True)
     
-        self.suffix = suffix
+        self.output_filename = output_filename
         self.maxiter = maxiter
         self.n_beta = n_beta
         self.sigma_filter = self.brush_size
@@ -186,7 +186,7 @@ class optimizer:
     
     def save_data(self, x0=0, beta=0):
         if comm.rank == 0:
-            np.savez(output_filename + "_TF_results",
+            np.savez(self.output_filename + "_TF_results",
                      cost_hist=self.cost_hist,
                      n_iter=self.n_iter,
                      ntrial=self.ntrial,
@@ -194,7 +194,7 @@ class optimizer:
                      x_fin=self.x_fin,
                      beta=beta)
                      
-            np.savez(output_filename + "_TF_density_hist",
+            np.savez(self.output_filename + "_TF_density_hist",
                      x_hist=self.x_hist,
                      x_latent_hist=self.x_latent_hist,
                      x0=x0)

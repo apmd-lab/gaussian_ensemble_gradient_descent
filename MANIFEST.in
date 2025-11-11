@@ -1,0 +1,2 @@
+include README.md LICENSE
+recursive-include gegd/parameter_processing/feasible_design_generator *.h

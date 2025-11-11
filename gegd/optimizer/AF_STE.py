@@ -151,7 +151,7 @@ class optimizer:
         if comm.rank == 0:
             print('### Brush Optimization (seed = ' + str(n_seed) + ')\n', flush=True)
     
-        self.suffix = suffix
+        self.output_filename = output_filename
         self.sigma_filter = self.brush_size/2/np.sqrt(2)
 
         lb = -np.ones(self.Ndim)
@@ -203,12 +203,12 @@ class optimizer:
     
     def save_data(self, x_bounded=0, x_bin=0, jac_mean=0, jac_var=0, adam_iter=0):
         if comm.rank == 0:
-            np.savez(output_filename + "_AF_STE_results",
+            np.savez(self.output_filename + "_AF_STE_results",
                      cost_hist=self.cost_hist,
                      n_iter=self.n_iter,
                      adam_iter=adam_iter)
                      
-            np.savez(output_filename + "_AF_STE_density_hist",
+            np.savez(self.output_filename + "_AF_STE_density_hist",
                      x_hist=self.x_hist,
                      x_latent_hist=self.x_latent_hist,
                      x_bounded=x_bounded,
