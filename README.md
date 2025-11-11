@@ -33,8 +33,8 @@ pip install gegd
 1. Examples
 
   - Optimization of a non-convex test function ([code](./runfiles/run_optimization_test_functions.py))
-  - Optimization of a polarization beamsplitter ([TORCWA](https://github.com/kch3782/torcwa)) ([code](./runfiles/run_optimization_polarization_beamsplitter.py))
-  - Optimization of a 2D integrated mode converter (Ansys FDTD) ([code][./runfiles/run_optimization_mode_converter.py))
+  - Optimization of a polarization beamsplitter ([TORCWA](https://github.com/kch3782/torcwa)) ([code](./runfiles/run_optimization_diffraction_grating.py))
+  - Optimization of a 2D integrated mode converter (Ansys FDTD) ([code](./runfiles/run_optimization_mode_converter.py))
 
 2. Design Geometry
 
