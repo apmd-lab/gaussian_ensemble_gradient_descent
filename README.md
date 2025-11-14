@@ -30,13 +30,13 @@ pip install gegd
 
 # Brief Documentation
 
-1. Examples
+**1. Examples**
 
   - Optimization of a non-convex test function ([code](./runfiles/run_optimization_test_functions.py))
   - Optimization of a polarization beamsplitter ([TORCWA](https://github.com/kch3782/torcwa)) ([code](./runfiles/run_optimization_diffraction_grating.py))
   - Optimization of a 2D integrated mode converter (Ansys FDTD) ([code](./runfiles/run_optimization_mode_converter.py))
 
-2. Design Geometry
+**2. Design Geometry**
 
   - Symmetry: the following 4 types of [symmetries](https://en.wikipedia.org/wiki/List_of_planar_symmetry_groups) are available.
     - 0: no symmetry
@@ -54,7 +54,7 @@ pip install gegd
     - None: if periodic
     - ndarray of size (Nx + 2brush_size, Ny + 2brush_size): if non-periodic (refer to [Example 2](./runfiles/run_optimization_mode_converter.py) for details). The center part of the array [-brush_size:brush_size,-brush_size:brush_size] should be left undetermined (values of 0). Pixels in the outer padding can be assigned values of -1 (void) or 1 (solid). Make sure that the padding itself satisfies the minimum feature size defined by brush_size.
 
-3. Processing of Latent Density into Fully Feasible Designs
+**3. Processing of Latent Density into Fully Feasible Designs**
 
   - Latent densities [-1, 1] are mapped into feasible designs in 3 steps:
     1. Filtering by a Gaussian kernel --> filtered densities [-1, 1]
@@ -62,14 +62,14 @@ pip install gegd
     3. Feasible design generation --> feasible design [0, 1]
   - The feasible design generator is based on the algorithm by [Schubert et al.](https://pubs.acs.org/doi/full/10.1021/acsphotonics.2c00313), which was extended in this implementation to periodic designs and designs with various symmetry constraints.
 
-4. Definition of a custom cost function
+**4. Definition of a custom cost function**
 
   - Cost functions should be defined as a python class with the following methods:
     - get_cost(x, get_grad) --> returns cost & gradient (if get_grad==True)
     - set_accuracy(settings) --> sets the accuracy of the cost function evaluation. The settings argument can take any form.
   - Refer to sample cost functions for a [non-convex test function](./runfiles/test_functions/test_objective_function_rbf.py), [polarization beamsplitter](./runfiles/RCWA_functions/diffraction_grating.py), and [2D integrated mode converter](./runfiles/FDTD_functions/mode_converter_lumFDTD.py).
 
-5. Optimization algorithm settings
+**5. Optimization algorithm settings**
 
   - GEGD terminates after a specified number of iterations. This is the only available termination condition.
   - The following settings are recommended based on empirical observations:
@@ -83,6 +83,8 @@ pip install gegd
       4. 'gaussian_diagonal': cov = np.diag(sigma) @ cov_RBF @ np.diag(sigma) (sigma is a vector)
     - covariance_type='gaussian_constant' is recommended for best performance.
     - eta_mu=0.0001 is recommended for the ADAM learning rate for the Gaussian mean.
+
+**6. Function and Class Reference**
 
 ```
 gegd.parameter_processing.symmetry_operations.symmetrize(x, symmetry, Nx, Ny)
