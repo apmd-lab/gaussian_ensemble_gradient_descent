@@ -62,6 +62,28 @@ pip install gegd
     3. Feasible design generation --> feasible design [0, 1]
   - The feasible design generator is based on the algorithm by [Schubert et al.](https://pubs.acs.org/doi/full/10.1021/acsphotonics.2c00313), which was extended in this implementation to periodic designs and designs with various symmetry constraints.
 
+4. Definition of a custom cost function
+
+  - Cost functions should be defined as a python class with the following methods:
+    - get_cost(x, get_grad) --> returns cost & gradient (if get_grad==True)
+    - set_accuracy(settings) --> sets the accuracy of the cost function evaluation. The settings argument can take any form.
+  - Refer to sample cost functions for a [non-convex test function](./runfiles/test_functions/test_objective_function_rbf.py), [polarization beamsplitter](./runfiles/RCWA_functions/diffraction_grating.py), and [2D integrated mode converter](./runfiles/FDTD_functions/mode_converter_lumFDTD.py).
+
+5. Optimization algorithm settings
+
+  - GEGD terminates after a specified number of iterations. This is the only available termination condition.
+  - The following settings are recommended based on empirical observations:
+    - The cost function should be normalized such that its range falls roughly between -1 and 0
+    - The standard deviation (scaling factor for the covariance matrix) for the Gaussian sampling distribution should be set to 0.005 (i.e., sigma_ensemble_max=0.01)
+    - To accelerate convergence, the user-defined cost function is exponentially weighted such that lower cost values are greatly emphasized. coeff_exp=20, and cost_threshold=0 are recommended.
+    - 4 different covariance matrix structures are available:
+      1. 'constant': cov = sigma**2*identity (sigma is a scalar)
+      2. 'diagonal': cov = np.diag(sigma**2) (sigma is a vector)
+      3. 'gaussian_constant': cov = sigma**2*cov_RBF (sigma is a scalar)
+      4. 'gaussian_diagonal': cov = np.diag(sigma) @ cov_RBF @ np.diag(sigma) (sigma is a vector)
+    - covariance_type='gaussian_constant' is recommended for best performance.
+    - eta_mu=0.0001 is recommended for the ADAM learning rate for the Gaussian mean.
+
 ```
 gegd.parameter_processing.symmetry_operations.symmetrize(x, symmetry, Nx, Ny)
 ```
@@ -104,8 +126,8 @@ Reduces a 2D density map into a vector of independent densities according to the
     - **Nx**: (*int*) Pixel length of the design region along x
     - **Ny**: (*int*) Pixel length of the design region along y
     
-    - **Returns**:
-      - **x**: (*ndarray*) Independent density vector
+  - **Returns**:
+    - **x**: (*ndarray*) Independent density vector
     
 ```
 gegd.parameter_processing.symmetry_operations.desymmetrize_jacobian(jac_sym, symmetry, Nx, Ny)
@@ -167,7 +189,7 @@ Backpropagates gradients through the filtering and projection steps.
 gegd.parameter_processing.density_transforms.binarize(x, symmetry, periodic, Nx, Ny, brush_size, brush_shape, beta_proj, sigma_filter, dx=None, upsample_ratio=1, padding=None, output_details=False, Nthreads=1)
 ```
 
-Backpropagates gradients through the filtering and projection steps.
+A wrapper function that transforms reduced latent densities into feasible designs.
 
   - **Parameters**:
     - **x**: (*ndarray of size (N_designs, N_param)*) Array of reduced latent densities.
@@ -204,29 +226,7 @@ Generates feasible designs from filtered and projected density maps.
     - **Nthreads**: (*int*) Number of threads available for use by the feasible design generator.
   
   - **Returns**:
-    - *x_brush**: (*ndarray of size (N_designs, NxNy) and type np.float32*) Generated feasible designs.
-
-4. Definition of a custom cost function
-
-  - Cost functions should be defined as a python class with the following methods:
-    - get_cost(x, get_grad) --> returns cost & gradient (if get_grad==True)
-    - set_accuracy(settings) --> sets the accuracy of the cost function evaluation. The settings argument can take any form.
-  - Refer to sample cost functions for a [non-convex test function](./runfiles/test_functions/test_objective_function_rbf.py), [polarization beamsplitter](./runfiles/RCWA_functions/diffraction_grating.py), and [2D integrated mode converter](./runfiles/FDTD_functions/mode_converter_lumFDTD.py).
-
-5. Optimization algorithm settings
-
-  - GEGD terminates after a specified number of iterations. This is the only available termination condition.
-  - The following settings are recommended based on empirical observations:
-    - The cost function should be normalized such that its range falls roughly between -1 and 0
-    - The standard deviation (scaling factor for the covariance matrix) for the Gaussian sampling distribution should be set to 0.005 (i.e., sigma_ensemble_max=0.01)
-    - To accelerate convergence, the user-defined cost function is exponentially weighted such that lower cost values are greatly emphasized. coeff_exp=20, and cost_threshold=0 are recommended.
-    - 4 different covariance matrix structures are available:
-      1. 'constant': cov = sigma**2*identity (sigma is a scalar)
-      2. 'diagonal': cov = np.diag(sigma**2) (sigma is a vector)
-      3. 'gaussian_constant': cov = sigma**2*cov_RBF (sigma is a scalar)
-      4. 'gaussian_diagonal': cov = np.diag(sigma) @ cov_RBF @ np.diag(sigma) (sigma is a vector)
-    - covariance_type='gaussian_constant' is recommended for best performance.
-    - eta_mu=0.0001 is recommended for the ADAM learning rate for the Gaussian mean.
+    - **x_brush**: (*ndarray of size (N_designs, NxNy) and type np.float32*) Generated feasible designs.
 
 ```
 class gegd.optimizer.GEGD.optimizer(Nx, Ny, symmetry, periodic, padding, maxiter, t_low_fidelity, t_high_fidelity, t_iteration, high_fidelity_setting, low_fidelity_setting, brush_size, sigma_ensemble_max=1.0, upsample_ratio=1, beta_proj=8, brush_shape='circle', covariance_type='constant', coeff_exp=5, cost_threshold=0, cost_obj=None, Nthreads=1)
