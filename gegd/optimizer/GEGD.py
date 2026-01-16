@@ -22,16 +22,19 @@ class optimizer:
                  t_iteration,
                  high_fidelity_setting,
                  low_fidelity_setting,
-                 brush_size,
+                 min_feature_size,
+                 sigma_RBF,
                  sigma_ensemble_max=1.0,
                  upsample_ratio=1,
                  beta_proj=8,
+                 feasible_design_generation_method='brush',
                  brush_shape='circle',
                  covariance_type='constant',
                  coeff_exp=5,
                  cost_threshold=0,
                  cost_obj=None,
                  Nthreads=1,
+                 verbosity=1,
                  ):
         
         self.Nx = Nx
@@ -45,12 +48,13 @@ class optimizer:
         self.t_iteration = t_iteration
         self.beta_proj = beta_proj
         self.beta_proj_sigma = beta_proj
-        self.brush_size = brush_size
+        self.feasible_design_generation_method = feasible_design_generation_method
+        self.min_feature_size = min_feature_size
         self.sigma_ensemble_max = sigma_ensemble_max
         self.upsample_ratio = upsample_ratio
         self.brush_shape = brush_shape
-        self.sigma_filter = brush_size/2/np.sqrt(2)
-        self.sigma_RBF = brush_size/2/np.sqrt(2)
+        self.sigma_filter = sigma_RBF #min_feature_size/2/np.sqrt(2)
+        self.sigma_RBF = sigma_RBF #min_feature_size/2/np.sqrt(2)
         self.covariance_type = covariance_type
         self.high_fidelity_setting = high_fidelity_setting
         self.low_fidelity_setting = low_fidelity_setting
@@ -58,6 +62,7 @@ class optimizer:
         self.cost_threshold = cost_threshold
         self.cost_obj = cost_obj
         self.Nthreads = Nthreads
+        self.verbosity = verbosity
         
         # Get Number of Independent Parameters
         if symmetry == 0:
@@ -80,11 +85,21 @@ class optimizer:
             
         elif self.covariance_type == 'gaussian_constant':
             self.Nsigma = 1
+
+            t1 = time.time()
             self.construct_gaussian_covariance()
+            t2 = time.time()
+            if comm.rank == 0 and self.verbosity >= 2:
+                print('--> Gaussian Covariance Construction: ', t2-t1, flush=True)
             
         elif self.covariance_type == 'gaussian_diagonal':
             self.Nsigma = self.Ndim
+
+            t1 = time.time()
             self.construct_gaussian_covariance()
+            t2 = time.time()
+            if comm.rank == 0 and self.verbosity >= 2:
+                print('--> Gaussian Covariance Construction: ', t2-t1, flush=True)
     
     def construct_gaussian_covariance(self, max_condition_number=1e4):
         self.cov_g = np.zeros((self.Ndim, self.Ndim))
@@ -191,6 +206,7 @@ class optimizer:
         
         self.cov_g = self.cov_g + eps*np.identity(self.Ndim)
         self.cov_g_inv = np.linalg.inv(self.cov_g)
+        self.L_g = np.linalg.cholesky(self.cov_g)
     
     def construct_cov_matrix(self, sigma):
         if self.covariance_type == 'constant':
@@ -239,12 +255,17 @@ class optimizer:
         cov, cov_inv = self.construct_cov_matrix(sigma_ensemble)
         
         # Get Brush Binarized Densities ------------------------------------------------------------
-        x_sample = dtf.binarize(x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.brush_size, self.brush_shape, self.beta_proj, self.sigma_filter, dx=dx,
-                                upsample_ratio=self.upsample_ratio, padding=self.padding, Nthreads=self.Nthreads)
+        t1 = time.time()
+        x_sample = dtf.binarize(x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.brush_shape, self.beta_proj, self.sigma_filter, dx=dx,
+                                upsample_ratio=self.upsample_ratio, padding=self.padding, method=self.feasible_design_generation_method, Nthreads=self.Nthreads)
+        t2 = time.time()
+        if comm.rank == 0 and self.verbosity >= 2:
+            print('--> Feasible Design Generation: ', t2-t1, flush=True)
         
         # Sample Modified Cost Function --------------------------------------------------------------
         self.cost_obj.set_accuracy(self.high_fidelity_setting)
-        
+
+        t1 = time.time()
         f = np.zeros(self.Nensemble)
         f_logDeriv = np.zeros((self.Nensemble, self.Ndim+self.Nsigma))
         for n in range(self.Nensemble):
@@ -253,10 +274,13 @@ class optimizer:
             f[n] = -np.exp(-self.coeff_exp*f_shifted)
             f_logDeriv[n,:self.Ndim] = self.mu_derivative(dx[n,:], cov_inv, f[n])
             f_logDeriv[n,self.Ndim:] = self.sigma_derivative(dx[n,:], sigma_ensemble, cov_inv, f[n])
+        t2 = time.time()
+        if comm.rank == 0 and self.verbosity >= 2:
+            print('--> Cost Computation: ', t2-t1, flush=True)
 
         if test_function:
-            x_fp0, x_b0 = dtf.binarize(x0.reshape(1,-1), self.symmetry, self.periodic, self.Nx, self.Ny, self.brush_size, self.brush_shape, self.beta_proj, self.sigma_filter,
-                                       upsample_ratio=self.upsample_ratio, output_details=True, padding=self.padding, Nthreads=self.Nthreads)
+            x_fp0, x_b0 = dtf.binarize(x0.reshape(1,-1), self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.brush_shape, self.beta_proj, self.sigma_filter,
+                                       upsample_ratio=self.upsample_ratio, output_details=True, padding=self.padding, method=self.feasible_design_generation_method, Nthreads=self.Nthreads)
             f0, jac_b_STE_sym = self.cost_obj.get_cost(x_b0, True)
             jac_b_STE_sym = jac_b_STE_sym.reshape(self.Nx, self.Ny)
         else:
@@ -343,12 +367,12 @@ class optimizer:
             jac_sigma_fp_ensemble_sym = symOp.symmetrize_jacobian(jac_fp_ensemble[self.Ndim:], self.symmetry, self.Nx, self.Ny)
         
         if test_function:
-            jac_latent_STE = dtf.backprop_filter_and_project(jac_b_STE_sym, x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.brush_size, self.sigma_filter, self.beta_proj, padding=self.padding)
+            jac_latent_STE = dtf.backprop_filter_and_project(jac_b_STE_sym, x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta_proj, padding=self.padding)
         
         jac_latent_ensemble = jac_fp_ensemble.copy()
-        jac_latent_ensemble[:self.Ndim] = dtf.backprop_filter_and_project(jac_mu_fp_ensemble_sym, x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.brush_size, self.sigma_filter, self.beta_proj, padding=self.padding)
+        jac_latent_ensemble[:self.Ndim] = dtf.backprop_filter_and_project(jac_mu_fp_ensemble_sym, x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta_proj, padding=self.padding)
         if self.Nsigma > 1:
-            jac_latent_ensemble[self.Ndim:] = dtf.backprop_filter_and_project(jac_sigma_fp_ensemble_sym, x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.brush_size, self.sigma_filter, self.beta_proj_sigma, padding=self.padding)
+            jac_latent_ensemble[self.Ndim:] = dtf.backprop_filter_and_project(jac_sigma_fp_ensemble_sym, x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta_proj_sigma, padding=self.padding)
         
         if test_function:
             cost_all = (f0, np.mean(f_est))
@@ -373,8 +397,13 @@ class optimizer:
              x_bounded_norm_ref=None,
              ):
     
+        if comm.rank == 0 and self.verbosity >= 2:
+            print('--> Starting ADAM', flush=True)
+
         # Dummy Variables
-        x = -np.log((ub - lb)/(x_bounded - lb) - 1)
+        mask_bound = (lb != -np.inf) & (ub != np.inf)
+        x = x_bounded.copy()
+        x[mask_bound] = -np.log((ub[mask_bound] - lb[mask_bound])/(x_bounded[mask_bound] - lb[mask_bound]) - 1)
         x[ub==lb] = ub[ub==lb]
         
         if jac_mean is None:
@@ -412,23 +441,46 @@ class optimizer:
             
             var_reduction = (1 - ((self.r_CV - 1)/self.r_CV)*corr_mean**2)/self.Nensemble
             
-            x_bounded = lb + (ub - lb)/(1 + np.exp(-x))
+            x_bounded = x.copy()
+            x_bounded[mask_bound] = lb[mask_bound] + (ub[mask_bound] - lb[mask_bound])/(1 + np.exp(-x[mask_bound]))
             
             sigma_ensemble = x_bounded[self.Ndim:]
             if self.Nsigma == 1:
                 sigma_fp = sigma_ensemble.copy()
             else:
                 sigma_scaled = 2*(sigma_ensemble - lb[self.Ndim:])/(ub[self.Ndim:] - lb[self.Ndim:]) - 1
-                sigma_fp_scaled = dtf.filter_and_project(sigma_scaled, self.symmetry, self.periodic, self.Nx, self.Ny, self.brush_size, self.sigma_filter, self.beta_proj_sigma, padding=self.padding)
+                sigma_fp_scaled = dtf.filter_and_project(sigma_scaled, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta_proj_sigma, padding=self.padding)
                 sigma_fp = (sigma_fp_scaled + 1)*(ub[self.Ndim:] - lb[self.Ndim:])/2 + lb[self.Ndim:]
+
             cov, cov_inv = self.construct_cov_matrix(sigma_fp)
             
-            dx = np.random.multivariate_normal(np.zeros(self.Ndim), cov, size=self.r_CV*self.Nensemble)
-            
+            t1 = time.time()
+            if self.covariance_type == 'gaussian_diagonal':
+                # Fast sampling using precomputed Cholesky
+                # cov = D @ L @ L.T @ D = (D @ L) @ (D @ L).T
+                # L_eff = D @ L = sigma_fp[:, None] * self.L_g
+                # dx = z @ L_eff.T
+                u = np.random.standard_normal((self.r_CV * self.Nensemble, self.Ndim))
+                dx = u @ (sigma_fp[:, np.newaxis] * self.L_g).T
+            elif self.covariance_type == 'gaussian_constant':
+                # Fast sampling for constant sigma
+                # cov = sigma^2 * L * L.T = (sigma * L) * (sigma * L).T
+                u = np.random.standard_normal((self.r_CV * self.Nensemble, self.Ndim))
+                dx = u @ (sigma_fp * self.L_g).T
+            else: 
+                dx = np.random.multivariate_normal(np.zeros(self.Ndim), cov, size=self.r_CV*self.Nensemble)
+            t2 = time.time()
+            if comm.rank == 0 and self.verbosity >= 2:
+                print('--> Random Sample Generation: ', t2-t1, flush=True)
+
+            t1 = time.time()
             loss, x_bin0, loss_mean, loss_std, loss_ctrl_mean, loss_ctrl_std, jac, ctrlVarCoeff_mu, ctrlVarCoeff_sigma, corr_f, corr_mu, corr_sigma, f_best, x_best = self.ensemble_jacobian(x_bounded,
                                                                                                                                                                                              dx,
                                                                                                                                                                                              sigma_fp,
                                                                                                                                                                                              False)
+            t2 = time.time()
+            if comm.rank == 0 and self.verbosity >= 2:
+                print('--> Ensemble Jacobian Computation: ', t2-t1, flush=True)
             
             if self.Nsigma > 1:
                 jac[self.Ndim:] *= 2/(ub[self.Ndim:] - lb[self.Ndim:]) # accounts for covariance rescaling
@@ -436,7 +488,7 @@ class optimizer:
             jac_save = jac.copy()
 
             jac[ub==lb] = 0
-            jac *= np.exp(-x)*(ub - lb)/(1 + np.exp(-x))**2
+            jac[mask_bound] *= np.exp(-x[mask_bound])*(ub[mask_bound] - lb[mask_bound])/(1 + np.exp(-x[mask_bound]))**2
             
             self.N_high_fidelity_hist = np.append(self.N_high_fidelity_hist, self.Nensemble)
             self.N_low_fidelity_hist = np.append(self.N_low_fidelity_hist, self.r_CV*self.Nensemble)
@@ -512,7 +564,7 @@ class optimizer:
                                                                                                                                        self.r_CV*self.Nensemble,
                                                                                                                                        var_reduction,
                                                                                                                                        int(1/var_reduction),
-                                                                                                                                       sigma_fp,
+                                                                                                                                       sigma_fp[0],
                                                                                                                                        ctrlVarCoeff_mu,
                                                                                                                                        np.mean(corr_f),
                                                                                                                                        np.mean(corr_mu),
@@ -538,11 +590,16 @@ class optimizer:
                                                                                                                                                                   loss_ctrl_std,
                                                                                                                                                                   self.best_cost_hist[-1]),
                                                                                                                                                                   end='', flush=True)
+            
+            t1 = time.time()
             self.save_data(x_bounded=x_bounded,
                            jac_mean=jac_mean,
                            jac_var=jac_var,
                            adam_iter=adam_iter,
                            x_bounded_norm_ref=x_bounded_norm_ref)
+            t2 = time.time()
+            if comm.rank == 0 and self.verbosity >= 2:
+                print('--> Data Saving: ', t2-t1, flush=True)
 
             if adam_iter >= self.maxiter:
                 #self.n_iter += 1
@@ -579,22 +636,20 @@ class optimizer:
             self.n_iter += 1
 
     def run(self, n_seed, output_filename, x0=None, eta_mu=0.01, eta_sigma=1.0, load_data=False):
-        if comm.rank == 0:
+        if comm.rank == 0 and self.verbosity >= 1:
             print('### Ensemble Optimization (seed = ' + str(n_seed) + ')\n', flush=True)
     
         np.random.seed(n_seed)
         self.output_filename = output_filename
-        self.optimizer = optimizer
         
         sigma_ensemble = self.sigma_ensemble_max/2
 
         lb = np.zeros(self.Ndim+self.Nsigma)
-        lb[:self.Ndim] = -1
+        lb[:self.Ndim] = -np.inf
         lb[self.Ndim:] = 0.99*self.sigma_ensemble_max/2
         ub = np.zeros(self.Ndim+self.Nsigma)
-        ub[:self.Ndim] = 1
+        ub[:self.Ndim] = np.inf
         ub[self.Ndim:] = 1.01*self.sigma_ensemble_max/2
-        #ub[self.Ndim:] = 10.0
         
         if load_data:
             data_file1 = output_filename + "_GEGD_results.npz"
@@ -672,7 +727,7 @@ class optimizer:
             adam_iter = None
             x_bounded_norm_ref = None
         
-        if comm.rank == 0:
+        if comm.rank == 0 and self.verbosity >= 1:
             if self.Nsigma == 1:
                 print('    | Iter | N_acc | N_inacc | var_red | N_eff |  sigma  | CVCoeff | corr(f) | corr(g) |  Cost Ens  | Cost Ens CV | Cost Best |  x norm  | ADAM_LR | t_rem(hr) |',
                       flush=True)
@@ -686,6 +741,8 @@ class optimizer:
         self.ADAM(x0, lb, ub, 0.9, 0.999, eta_ADAM,
                   jac_mean=jac_mean, jac_var=jac_var, adam_iter=adam_iter, x_bounded_norm_ref=x_bounded_norm_ref)
         
+        if comm.rank == 0 and self.verbosity >= 2:
+            print('--> Saving Final Data', flush=True)
         self.save_data()
     
     def save_data(self, x_bounded=None, jac_mean=None, jac_var=None, adam_iter=None, x_bounded_norm_ref=None):
@@ -808,7 +865,7 @@ class optimizer:
             sigma_fp = sigma_ensemble.copy()
         else:
             sigma_scaled = 2*(sigma_ensemble - lb[self.Ndim:])/(ub[self.Ndim:] - lb[self.Ndim:]) - 1
-            sigma_fp_scaled = dtf.filter_and_project(sigma_scaled, self.symmetry, self.periodic, self.Nx, self.Ny, self.brush_size, self.sigma_filter, self.beta_proj_sigma, padding=self.padding)
+            sigma_fp_scaled = dtf.filter_and_project(sigma_scaled, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta_proj_sigma, padding=self.padding)
             sigma_fp = (sigma_fp_scaled + 1)*(ub[self.Ndim:] - lb[self.Ndim:])/2 + lb[self.Ndim:]
         cov, cov_inv = self.construct_cov_matrix(sigma_fp)
 

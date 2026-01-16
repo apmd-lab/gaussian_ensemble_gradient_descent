@@ -23,7 +23,7 @@ fdg = Extension(
 )
 
 setup(name='gegd',                # Package name
-      version='0.0.7',                         # Package version
+      version='0.3.5',                         # Package version
       author='Seokhwan Min',                      # Your name
       author_email='petermsh513@gmail.com',   # Your email address
       description='Ensemble-based global search algorithm for freeform topology optimization.',  # Short description

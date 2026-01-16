@@ -36,14 +36,16 @@ int* make_feasible(
     if (upsample_ratio > 1) {
         brush_size = (int)(floor(upsample_ratio * sqrt((brush_size - 2)*(brush_size - 2) + 1) + 2));
         
-        zoom_nearest(weight,
-                     weight_upsampled,
-                     Nx,
-                     Ny,
-                     Nx_up,
-                     Ny_up,
-                     upsample_ratio,
-                     periodic);
+        zoom_nearest(
+            weight,
+            weight_upsampled,
+            Nx,
+            Ny,
+            Nx_up,
+            Ny_up,
+            upsample_ratio,
+            periodic
+        );
         
         float* sym = (float*)malloc(Nx_up * Ny_up * sizeof(float));
         apply_symmetry_float(
@@ -79,21 +81,35 @@ int* make_feasible(
     int* touch_void = (int*)calloc(Nx_up * Ny_up, sizeof(int));
     int* pix_solid = (int*)calloc(Nx_up * Ny_up, sizeof(int));
     float* score_solid = (float*)calloc(Nx_up * Ny_up, sizeof(float));
+    float* score_solid_pre_fill = (float*)calloc(Nx_up * Ny_up, sizeof(float));
 
     int r_c = (brush_size - 1) / 2;
+    int r_c_plus4 = (brush_size + 3) / 2;
     int brush_size_conv = brush_size + 2 * r_c;
     int brush_size_conv2 = brush_size + 4 * r_c;
     
     // Define brush
     int* brush = (int*)calloc(brush_size * brush_size, sizeof(int));
-    int brush_sum = 0;
     for (int i = 0; i < brush_size; ++i) {
         for (int j = 0; j < brush_size; ++j) {
             int dx = i - r_c;
             int dy = j - r_c;
             if (sqrt(dx*dx + dy*dy) <= r_c) {
                 brush[IDX(i, j, brush_size)] = 1;
-                ++brush_sum;
+            }
+        }
+    }
+
+    // Define brush with size + 4
+    int* brush_plus4 = (int*)calloc((brush_size + 4) * (brush_size + 4), sizeof(int));
+    int brush_plus4_sum = 0;
+    for (int i = 0; i < brush_size + 4; ++i) {
+        for (int j = 0; j < brush_size + 4; ++j) {
+            int dx = i - r_c_plus4;
+            int dy = j - r_c_plus4;
+            if (sqrt(dx*dx + dy*dy) <= r_c_plus4) {
+                brush_plus4[IDX(i, j, brush_size + 4)] = 1;
+                ++brush_plus4_sum;
             }
         }
     }
@@ -107,13 +123,15 @@ int* make_feasible(
     }
 
     int* temp = (int*)calloc(brush_size_conv * brush_size_conv, sizeof(int));
-    binary_convolve(brush_conv_shape,
-                    temp,
-                    brush,
-                    brush_size_conv,
-                    brush_size_conv,
-                    brush_size,
-                    0);
+    binary_convolve(
+        brush_conv_shape,
+        temp,
+        brush,
+        brush_size_conv,
+        brush_size_conv,
+        brush_size,
+        0
+    );
     for (int i = 0; i < brush_size_conv * brush_size_conv; ++i)
         brush_conv_shape[i] = temp[i];
 
@@ -128,13 +146,15 @@ int* make_feasible(
     }
 
     temp = (int*)calloc(brush_size_conv2 * brush_size_conv2, sizeof(int));
-    binary_convolve(brush_conv_shape2,
-                    temp,
-                    brush,
-                    brush_size_conv2,
-                    brush_size_conv2,
-                    brush_size,
-                    0);
+    binary_convolve(
+        brush_conv_shape2,
+        temp,
+        brush,
+        brush_size_conv2,
+        brush_size_conv2,
+        brush_size,
+        0
+    );
     for (int i = 0; i < brush_size_conv2 * brush_size_conv2; ++i)
         brush_conv_shape2[i] = temp[i];
 
@@ -142,55 +162,65 @@ int* make_feasible(
     
     if (debug) {
         save_int_array_to_npy("brush.npy", brush, brush_size, brush_size);
+        save_int_array_to_npy("brush_plus4.npy", brush_plus4, brush_size + 4, brush_size + 4);
         save_int_array_to_npy("brush_conv_shape.npy", brush_conv_shape, brush_size_conv, brush_size_conv);
         save_int_array_to_npy("brush_conv_shape2.npy", brush_conv_shape2, brush_size_conv2, brush_size_conv2);
         //exit(EXIT_FAILURE);
     }
 
     // Compute the solid reward array
-    convolve(weight_upsampled,
-             score_solid,
-             brush,
-             Nx_up,
-             Ny_up,
-             brush_size,
-             periodic);
+    convolve(
+        weight_upsampled,
+        score_solid,
+        brush,
+        Nx_up,
+        Ny_up,
+        brush_size,
+        periodic
+    );
+
+    convolve(
+        weight_upsampled,
+        score_solid_pre_fill,
+        brush_plus4,
+        Nx_up,
+        Ny_up,
+        brush_size + 4,
+        periodic
+    );
              
     free(weight_upsampled);
     
     if (debug) {
         save_float_array_to_npy("score_solid.npy", score_solid, Nx_up, Ny_up);
+        save_float_array_to_npy("score_solid_pre_fill.npy", score_solid_pre_fill, Nx_up, Ny_up);
         //exit(EXIT_FAILURE);
     }
     
     // Pre-fill touches
     int* touch_solid_pos = (int*)calloc(Nx_up * Ny_up, sizeof(int));
     int* touch_solid_neg = (int*)calloc(Nx_up * Ny_up, sizeof(int));
-    int* touch_void_pos = (int*)calloc(Nx_up * Ny_up, sizeof(int));
-    int* touch_void_neg = (int*)calloc(Nx_up * Ny_up, sizeof(int));
     
     for (int i = 0; i < Nx_up * Ny_up; ++i) {
-        if (score_solid[i] >= brush_sum) {
+        if (score_solid_pre_fill[i] >= brush_plus4_sum) {
             touch_solid[i] = 1;
-            touch_void[i] = -1;
             touch_solid_pos[i] = 1;
-            touch_void_neg[i] = 1;
-        } else if (score_solid[i] <= -brush_sum) {
-            touch_solid[i] = -1;
+        } else if (score_solid_pre_fill[i] <= -brush_plus4_sum) {
             touch_void[i] = 1;
             touch_solid_neg[i] = 1;
-            touch_void_pos[i] = 1;
         }
     }
     
     temp = (int*)calloc(Nx_up * Ny_up, sizeof(int));
-    binary_convolve(touch_solid_pos,
-                    temp,
-                    brush,
-                    Nx_up,
-                    Ny_up,
-                    brush_size,
-                    periodic);
+    binary_convolve(
+        touch_solid_pos,
+        temp,
+        brush,
+        Nx_up,
+        Ny_up,
+        brush_size,
+        periodic
+    );
     for (int i = 0; i < Nx_up * Ny_up; ++i) {
         if (temp[i]) {
             pix_solid[i] = 1;
@@ -200,16 +230,54 @@ int* make_feasible(
     free(temp);
     
     temp = (int*)calloc(Nx_up * Ny_up, sizeof(int));
-    binary_convolve(touch_solid_neg,
-                    temp,
-                    brush,
-                    Nx_up,
-                    Ny_up,
-                    brush_size,
-                    periodic);
+    binary_convolve(
+        touch_solid_neg,
+        temp,
+        brush,
+        Nx_up,
+        Ny_up,
+        brush_size,
+        periodic
+    );
     for (int i = 0; i < Nx_up * Ny_up; ++i) {
         if (temp[i]) {
             pix_solid[i] = -1;
+        }
+    }
+    
+    free(temp);
+
+    temp = (int*)calloc(Nx_up * Ny_up, sizeof(int));
+    binary_convolve(
+        touch_solid_pos,
+        temp,
+        brush_conv_shape,
+        Nx_up,
+        Ny_up,
+        brush_size_conv,
+        periodic
+    );
+    for (int i = 0; i < Nx_up * Ny_up; ++i) {
+        if (temp[i]) {
+            touch_void[i] = -1;
+        }
+    }
+    
+    free(temp);
+
+    temp = (int*)calloc(Nx_up * Ny_up, sizeof(int));
+    binary_convolve(
+        touch_solid_neg,
+        temp,
+        brush_conv_shape,
+        Nx_up,
+        Ny_up,
+        brush_size_conv,
+        periodic
+    );
+    for (int i = 0; i < Nx_up * Ny_up; ++i) {
+        if (temp[i]) {
+            touch_solid[i] = -1;
         }
     }
     
@@ -226,8 +294,6 @@ int* make_feasible(
     
     free(touch_solid_pos);
     free(touch_solid_neg);
-    free(touch_void_pos);
-    free(touch_void_neg);
         
     // Compute reference convolutions on delta
     int* refconv0 = (int*)calloc(Nx_up * Ny_up, sizeof(int));
@@ -238,45 +304,52 @@ int* make_feasible(
     refconv2[0] = 1;
     
     temp = (int*)calloc(Nx_up * Ny_up, sizeof(int));
-    binary_convolve(refconv0,
-                    temp,
-                    brush,
-                    Nx_up,
-                    Ny_up,
-                    brush_size,
-                    1);
+    binary_convolve(
+        refconv0,
+        temp,
+        brush,
+        Nx_up,
+        Ny_up,
+        brush_size,
+        1
+    );
     for (int i = 0; i < Nx_up * Ny_up; ++i)
         refconv0[i] = temp[i];
     
     free(temp);
         
     temp = (int*)calloc(Nx_up * Ny_up, sizeof(int));
-    binary_convolve(refconv1,
-                    temp,
-                    brush_conv_shape,
-                    Nx_up,
-                    Ny_up,
-                    brush_size_conv,
-                    1);
+    binary_convolve(
+        refconv1,
+        temp,
+        brush_conv_shape,
+        Nx_up,
+        Ny_up,
+        brush_size_conv,
+        1
+    );
     for (int i = 0; i < Nx_up * Ny_up; ++i)
         refconv1[i] = temp[i];
     
     free(temp);
     
     temp = (int*)calloc(Nx_up * Ny_up, sizeof(int));
-    binary_convolve(refconv2,
-                    temp,
-                    brush_conv_shape2,
-                    Nx_up,
-                    Ny_up,
-                    brush_size_conv2,
-                    1);
+    binary_convolve(
+        refconv2,
+        temp,
+        brush_conv_shape2,
+        Nx_up,
+        Ny_up,
+        brush_size_conv2,
+        1
+    );
     for (int i = 0; i < Nx_up * Ny_up; ++i)
         refconv2[i] = temp[i];
     
     free(temp);
     
     free(brush);
+    free(brush_plus4);
     free(brush_conv_shape);
     free(brush_conv_shape2);
     
@@ -310,6 +383,18 @@ int* make_feasible(
     free(refconv0);
     free(refconv1);
     free(refconv2);
+    
+    if (result == NULL) {
+        char filename[1024];
+        const char* home_dir = getenv("HOME");
+        if (home_dir) {
+            snprintf(filename, sizeof(filename), "%s/make_feasible_debug_weight.npy", home_dir);
+        } else {
+            snprintf(filename, sizeof(filename), "make_feasible_debug_weight.npy");
+        }
+        save_float_array_to_npy(filename, weight, Nx, Ny);
+        return NULL;
+    }
     
     int* result01 = (int*)malloc(Nx_up * Ny_up * sizeof(int));
     for (int i = 0; i < Nx_up * Ny_up; ++i)

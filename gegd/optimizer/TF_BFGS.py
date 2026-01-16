@@ -16,7 +16,7 @@ class optimizer:
                  periodic,
                  padding,
                  high_fidelity_setting,
-                 brush_size,
+                 min_feature_size,
                  upsample_ratio=1,
                  brush_shape='circle',
                  cost_obj=None,
@@ -29,7 +29,7 @@ class optimizer:
         self.symmetry = symmetry
         self.periodic = periodic
         self.padding = padding
-        self.brush_size = brush_size
+        self.min_feature_size = min_feature_size
         self.brush_shape = brush_shape
         self.high_fidelity_setting = high_fidelity_setting
         self.cost_obj = cost_obj
@@ -52,7 +52,7 @@ class optimizer:
     
     def grayscale_cost(self, x0):
         # Get Brush Binarized Densities ------------------------------------------------------------
-        x_temp = dtf.filter_and_project(x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.brush_size, self.sigma_filter, self.beta, padding=self.padding)
+        x_temp = dtf.filter_and_project(x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta, padding=self.padding)
         x_fp = (symOp.symmetrize(x_temp, self.symmetry, self.Nx, self.Ny).reshape(-1) + 1)/2
 
         # Sample Modified Cost Function --------------------------------------------------------------
@@ -89,7 +89,7 @@ class optimizer:
     
     def grayscale_jacobian(self, x0):
         # Get Brush Binarized Densities ------------------------------------------------------------
-        x_temp = dtf.filter_and_project(x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.brush_size, self.sigma_filter, self.beta, padding=self.padding)
+        x_temp = dtf.filter_and_project(x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta, padding=self.padding)
         x_fp = (symOp.symmetrize(x_temp, self.symmetry, self.Nx, self.Ny).reshape(-1) + 1)/2
 
         # Sample Modified Cost Function --------------------------------------------------------------
@@ -97,7 +97,7 @@ class optimizer:
         _, jac_temp = self.cost_obj.get_cost(x_fp, get_grad=True)
             
         jac_sym = jac_temp.reshape(self.Nx, self.Ny)
-        jac = dtf.backprop_filter_and_project(jac_sym, x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.brush_size, self.sigma_filter, self.beta, padding=self.padding)
+        jac = dtf.backprop_filter_and_project(jac_sym, x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta, padding=self.padding)
         t2 = time.time()
         
         return jac
@@ -122,7 +122,7 @@ class optimizer:
         self.output_filename = output_filename
         self.maxiter = maxiter
         self.n_beta = n_beta
-        self.sigma_filter = self.brush_size
+        self.sigma_filter = self.min_feature_size
 
         if load_data:
             data_file1 = output_filename + "_TF_results.npz"

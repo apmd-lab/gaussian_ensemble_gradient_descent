@@ -56,19 +56,19 @@ int* find_index_max(
                     }
                 }
             } else if (symmetry == 1) {
-                if (i <= half_x && touch[idx] == 0) {
+                if (i < half_x && touch[idx] == 0) {
                     result[0] = i;
                     result[1] = j;
                     return result;
                 }
             } else if (symmetry == 2) {
-                if (i <= half_x && j <= half_y && touch[idx] == 0) {
+                if (i < half_x && j < half_y && touch[idx] == 0) {
                     result[0] = i;
                     result[1] = j;
                     return result;
                 }
             } else if (symmetry == 4) {
-                if (i <= j && j <= half_y && touch[idx] == 0) {
+                if (i <= j && j < half_y && touch[idx] == 0) {
                     result[0] = i;
                     result[1] = j;
                     return result;

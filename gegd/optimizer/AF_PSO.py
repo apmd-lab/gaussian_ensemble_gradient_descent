@@ -15,9 +15,10 @@ class optimizer:
                  padding,
                  maxiter,
                  high_fidelity_setting,
-                 brush_size,
+                 min_feature_size,
                  upsample_ratio=1,
                  beta_proj=8,
+                 feasible_design_generation_method='brush',
                  brush_shape='circle',
                  cost_obj=None,
                  Nthreads=1,
@@ -31,10 +32,11 @@ class optimizer:
         self.padding = padding
         self.maxiter = maxiter
         self.beta_proj = beta_proj
-        self.brush_size = brush_size
-        self.brush_shape = brush_shape
+        self.min_feature_size = min_feature_size
+        self.feasible_design_generation_method = feasible_design_generation_method
         self.upsample_ratio = upsample_ratio
-        self.sigma_filter = brush_size/2/np.sqrt(2)
+        self.brush_shape = brush_shape
+        self.sigma_filter = min_feature_size/2/np.sqrt(2)
         self.high_fidelity_setting = high_fidelity_setting
         self.cost_obj = cost_obj
         self.Nthreads = Nthreads
@@ -54,8 +56,8 @@ class optimizer:
 
     def get_loss_swarm(self, x):
         # Get Brush Binarized Densities ------------------------------------------------------------
-        x_bin = dtf.binarize(x, self.symmetry, self.periodic, self.Nx, self.Ny, self.brush_size, self.brush_shape, self.beta_proj, self.sigma_filter,
-                             upsample_ratio=self.upsample_ratio, padding=self.padding, Nthreads=self.Nthreads)
+        x_bin = dtf.binarize(x, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.brush_shape, self.beta_proj, self.sigma_filter,
+                             upsample_ratio=self.upsample_ratio, padding=self.padding, method=self.feasible_design_generation_method, Nthreads=self.Nthreads)
 
         # Sample Modified Cost Function --------------------------------------------------------------
         self.cost_obj.set_accuracy(self.high_fidelity_setting)

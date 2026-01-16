@@ -19,6 +19,7 @@ typedef struct {
     int symmetry;
     int dim;
     int upsample_ratio;
+    int error_flag;
 } ThreadPoolArgs;
 
 void* thread_worker_pool(void* arg) {
@@ -40,7 +41,8 @@ void* thread_worker_pool(void* arg) {
         );
 
         if (result == NULL) {
-            fprintf(stderr, "Thread failed during make_feasible.");
+            fprintf(stderr, "Thread failed during make_feasible.\n");
+            args->error_flag = 1;
             pthread_exit(NULL);
         }
 
@@ -97,6 +99,7 @@ PyObject* make_feasible_parallel(PyObject* self, PyObject* args) {
             .symmetry = symmetry,
             .dim = dim,
             .upsample_ratio = upsample_ratio,
+            .error_flag = 0,
         };
         
         pthread_create(&threads[t], NULL, thread_worker_pool, &thread_args[t]);
@@ -106,8 +109,21 @@ PyObject* make_feasible_parallel(PyObject* self, PyObject* args) {
         pthread_join(threads[t], NULL);
     }
     
+    int error_occurred = 0;
+    for (int t = 0; t < num_threads; ++t) {
+        if (thread_args[t].error_flag) {
+            error_occurred = 1;
+        }
+    }
+    
     free(threads);
     free(thread_args);
+
+    if (error_occurred) {
+        Py_DECREF(output_obj);
+        PyErr_SetString(PyExc_RuntimeError, "Error in make_feasible (infinite loop detected)");
+        return NULL;
+    }
 
     return output_obj;
 }

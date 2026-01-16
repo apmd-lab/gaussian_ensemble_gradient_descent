@@ -71,7 +71,7 @@ void fill_required_pixels(int* ind_max,
                                     max_val = score;
                                     max_idx = k;
                                 }
-                            }
+                             }
                         }
 
                         if (max_idx >= 0) {

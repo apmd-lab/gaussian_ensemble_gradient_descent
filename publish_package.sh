@@ -17,19 +17,21 @@ deactivate
 
 ## Example Project Structure
 ## my_project/
-## ¦§¦¡¦¡ setup.py
-## ¦§¦¡¦¡ README.md
-## ¦§¦¡¦¡ LICENSE
-## ¦§¦¡¦¡ MANIFEST.in
-## ¦¦¦¡¦¡ eschallot/
-##     ¦§¦¡¦¡ __init__.py
-##     ¦§¦¡¦¡ mie/
-##     ¦¢   ¦§¦¡¦¡ __init__.py
-##     ¦¢   ¦¦¦¡¦¡ module.py
-##     ¦¦¦¡¦¡ optimization/
-##         ¦§¦¡¦¡ __init__.py
-##         ¦¦¦¡¦¡ module.py
+## ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ setup.py
+## ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ README.md
+## ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ LICENSE
+## ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ MANIFEST.in
+## ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ eschallot/
+##     ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ __init__.py
+##     ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ mie/
+##     ï¿½ï¿½   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ __init__.py
+##     ï¿½ï¿½   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ module.py
+##     ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ optimization/
+##         ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ __init__.py
+##         ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ module.py
 
 ## Repair Wheels if not Pure Python
-# auditwheel repair dist/*linux_x86_64.whl -w dist/
+# auditwheel repair dist/*0.2.11*linux_x86_64.whl -w dist/
 # twine upload dist/*manylinux*.whl dist/*.tar.gz
+
+# PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring twine upload dist/*0.0.9*manylinux*.whl dist/*0.0.9.tar.gz

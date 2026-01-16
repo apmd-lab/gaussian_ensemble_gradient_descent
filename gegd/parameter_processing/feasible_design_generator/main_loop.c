@@ -36,15 +36,26 @@ int* main_loop(float* score_solid,
 
     int n_iter = 0;
     int debug_iter = INT_MAX;
+    int n_empty_touch_solid_prev = Nx * Ny;
+    int n_empty_touch_void_prev = Nx * Ny;
     while (1) {
         int solid_flag = 0, void_flag = 0;
         float max_solid = -FLT_MAX, max_void = -FLT_MAX;
 
-        for (int i = 0; i < Nx * Ny; ++i) {
-            if (touch_solid[i] == 0 && score_solid[i] > max_solid)
-                max_solid = score_solid[i];
-            if (touch_void[i] == 0 && -score_solid[i] > max_void)
-                max_void = -score_solid[i];
+        int half_x = (Nx + 1) / 2;
+        int half_y = (Ny + 1) / 2;
+        for (int i = 0; i < Nx; ++i) {
+            for (int j = 0; j < Ny; ++j) {
+                if (symmetry == 1 && i >= half_x) continue;
+                if (symmetry == 2 && (i >= half_x || j >= half_y)) continue;
+                if (symmetry == 4 && (i > j || j >= half_y)) continue;
+
+                int idx = i * Ny + j;
+                if (touch_solid[idx] == 0 && score_solid[idx] > max_solid)
+                    max_solid = score_solid[idx];
+                if (touch_void[idx] == 0 && -score_solid[idx] > max_void)
+                    max_void = -score_solid[idx];
+            }
         }
         
         if (n_iter == debug_iter) {
@@ -179,6 +190,13 @@ int* main_loop(float* score_solid,
         for (int i = 0; i < Nx * Ny; ++i)
             if (touch_void[i] == 0) n_empty_touch_void++;
         
+        if (n_empty_pix_solid > 0 && n_empty_touch_solid == n_empty_touch_solid_prev && n_empty_touch_void == n_empty_touch_void_prev) {
+            fprintf(stderr, "Error: No progress made in brush touching (infinite loop). n_empty_pix_solid: %d, n_empty_touch_solid: %d, n_empty_touch_void: %d\n", n_empty_pix_solid, n_empty_touch_solid, n_empty_touch_void);
+            free(pix_result);
+            return NULL;
+        }
+        n_empty_touch_solid_prev = n_empty_touch_solid;
+        n_empty_touch_void_prev = n_empty_touch_void;
         //if (n_iter % 100 == 0) {
         //printf("Iter %d | Unassigned Solid Pixels: %d | Unassigned Solid Touches: %d | Unassigned Void Touches: %d\n", n_iter, n_empty_pix_solid, n_empty_touch_solid, n_empty_touch_void);
         //}
