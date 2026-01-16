@@ -28,6 +28,8 @@ def filter_and_project(x, symmetry, periodic, Nx, Ny, min_feature_size, sigma_fi
         x_proj = x_desym.copy()
         x_proj[x_desym<=0] = -1
         x_proj[x_desym>0] = 1
+    elif beta_proj == 0:
+        x_proj = x_desym.copy()
     else:
         x_proj = np.tanh(beta_proj*x_desym)
     
@@ -45,8 +47,11 @@ def backprop_filter_and_project(jac_sym, x_latent, symmetry, periodic, Nx, Ny, m
     else:
         x_filter = x_sym.copy()
 
-    jac_proj = beta_proj/np.cosh(beta_proj*x_filter)**2
-    jac_proj *= jac_sym
+    if beta_proj == 0:
+        jac_proj = jac_sym.copy()
+    else:
+        jac_proj = beta_proj/np.cosh(beta_proj*x_filter)**2
+        jac_proj *= jac_sym
     
     if sigma_filter is not None:
         if periodic:

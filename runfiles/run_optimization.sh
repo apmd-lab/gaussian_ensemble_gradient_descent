@@ -27,10 +27,10 @@ export NUMEXPR_NUM_THREADS=1
 ##    python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py --Nthreads 12 --n_seed $i --load_data 0 --optimizer 'AF_STE' --symmetry 1 --upsample_ratio 1 --maxiter 500 --eta 0.001 --brush_size 7
 ##done
 
-## GEGD
+## ACMA_ES
 for i in {0..9}
 do
-    python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py --Nthreads 12 --n_seed $i --load_data 0 --optimizer 'GEGD' --Nx 105 --Ny 105 --symmetry 0 --upsample_ratio 1 --coeff_exp 20 --maxiter 200 --sigma_ensemble_max 0.86e-10 --eta 0.86e-12 --min_feature_size 7 --zoom_factor 1.0
+    python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py --Nthreads 12 --n_seed $i --load_data 0 --optimizer 'ACMA_ES' --Nx 105 --Ny 105 --symmetry 0 --upsample_ratio 1 --maxiter 200 --eta 0.1 --min_feature_size 7 --zoom_factor 1.0
 done
 
 ## AF_PSO

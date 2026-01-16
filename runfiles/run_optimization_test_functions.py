@@ -3,7 +3,7 @@ directory = os.path.dirname(os.path.realpath(__file__))
 
 import numpy as np
 import torch
-from gegd.optimizer import TF_BFGS, AF_STE, GEGD, AF_PSO, AF_GA, AF_CMA_ES, AF_BL
+from gegd.optimizer import TF_BFGS, AF_STE, GEGD, AF_PSO, AF_GA, AF_CMA_ES, AF_BL, ACMA_ES
 from itertools import product
 import time
 import util.read_mat_data as rmd
@@ -50,13 +50,12 @@ high_fidelity_setting = 0.0 # high-fidelity simulation setting (e.g. RCWA: numbe
 upsample_ratio = args.upsample_ratio
 
 sigma_ensemble_max = args.sigma_ensemble_max # maximum sampling standard deviation for the ensemble
-covariance_type = 'gaussian_constant' # structure of the covariance of the multivariate normal sampling distribution (constant, diagonal, gaussian_constant, gaussian_diagonal)
 t_low_fidelity = 1 # low-fidelity simulation time in seconds
 t_high_fidelity = 10 # high-fidelity simulation time in seconds
 t_iteration = t_high_fidelity*10 #15.88 # target time per optimization iteration in seconds (actual time may be slightly longer due to the brush generator)
 
 eta_mu = args.eta # NES: 0.01, ADAM: 0.01
-eta_sigma = 0.0001 # NES: 1.0, ADAM: 0.1
+eta_sigma = args.eta # NES: 1.0, ADAM: 0.1
 coeff_exp = args.coeff_exp
 cost_threshold = 0.0
 
@@ -90,11 +89,11 @@ elif symmetry == 4:
     Ndim = int(np.floor(Nx*upsample_ratio/2 + 0.5)*(np.floor(Nx*upsample_ratio/2 + 0.5) + 1)/2)
 
 cost_obj = objfun.custom_objective(cuda_ind=0,
-                                   symmetry=4,
+                                   symmetry=0,
                                    periodic=periodic,
-                                   Nx=100,
-                                   Ny=100,
-                                   Ndim=int(np.floor(100*upsample_ratio/2 + 0.5)*(np.floor(100*upsample_ratio/2 + 0.5) + 1)/2),
+                                   Nx=105,
+                                   Ny=105,
+                                   Ndim=105**2,
                                    min_feature_size=7,
                                    feasible_design_generation_method=feasible_design_generation_method,
                                    brush_shape='circle',
@@ -146,7 +145,7 @@ elif optimization_algorithm == 'GEGD':
         sigma_ensemble_max=sigma_ensemble_max,
         upsample_ratio=upsample_ratio,
         feasible_design_generation_method=feasible_design_generation_method,
-        covariance_type=covariance_type,
+        covariance_type='gaussian_constant',
         coeff_exp=coeff_exp,
         cost_threshold=cost_threshold,
         cost_obj=cost_obj,
@@ -156,6 +155,29 @@ elif optimization_algorithm == 'GEGD':
 
     T1 = time.time()
     optimizer.run(n_seed, output_filename, eta_mu=eta_mu, eta_sigma=eta_sigma, load_data=args.load_data)
+    T2 = time.time()
+    print('\n### Total time: ' + str(T2 - T1), flush=True)
+
+elif optimization_algorithm == 'ACMA_ES':
+    optimizer = ACMA_ES.optimizer(
+        Nx=Nx,
+        Ny=Ny,
+        Nsample=Nswarm,
+        symmetry=symmetry,
+        periodic=periodic,
+        padding=padding,
+        maxiter=maxiter,
+        high_fidelity_setting=high_fidelity_setting,
+        min_feature_size=min_feature_size,
+        sigma_RBF=min_feature_size/2/np.sqrt(2),
+        upsample_ratio=upsample_ratio,
+        feasible_design_generation_method=feasible_design_generation_method,
+        cost_obj=cost_obj,
+        Nthreads=Nthreads,
+    )
+
+    T1 = time.time()
+    optimizer.run(n_seed, output_filename, eta=args.eta, load_data=args.load_data)
     T2 = time.time()
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
