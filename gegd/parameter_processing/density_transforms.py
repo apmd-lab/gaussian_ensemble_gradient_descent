@@ -3,7 +3,10 @@ import os
 from scipy.ndimage import gaussian_filter
 import torch
 import gegd.parameter_processing.symmetry_operations as symOp
-import gegd.parameter_processing.feasible_design_generator.fdg as FDG
+try:
+    import gegd.parameter_processing.feasible_design_generator.fdg as FDG
+except ImportError:
+    import gegd.parameter_processing.feasible_design_generator_python as FDG
 import gegd.parameter_processing.bilevel_design_generator as bdg
 import time
 
@@ -80,6 +83,7 @@ def binarize(
     output_details=False,
     Nthreads=1,
     print_runtime_details=False,
+    cuda_ind=0,
 ):
     if method == 'brush':
         if padding is None:
@@ -223,9 +227,10 @@ def binarize(
             padding,
             min_feature_size,
             maxiter=60,
+            cuda_ind=cuda_ind,
         )
 
-        x_reward = torch.tensor(x_reward, device='cuda' if torch.cuda.is_available() else 'cpu', dtype=torch.float64)
+        x_reward = torch.tensor(x_reward, device='cuda:' + str(cuda_ind) if torch.cuda.is_available() else 'cpu', dtype=torch.float64)
         x_near_binary = generator.generate_near_binary_no_grad(x_reward)
         x_bin = np.where(x_near_binary.detach().cpu().numpy() < 0.5, 0, 1).reshape(N_designs, -1).astype(np.float32)
 

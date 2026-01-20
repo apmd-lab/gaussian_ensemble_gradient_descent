@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from scipy.ndimage import gaussian_filter
 import gegd.parameter_processing.symmetry_operations as symOp
 import gegd.parameter_processing.density_transforms as dtf
@@ -159,7 +160,7 @@ class optimizer:
         self.cov_g /= np.max(self.cov_g)
         
         # Determine minimum eps for inversion
-        eigvals = np.linalg.eigvalsh(self.cov_g)
+        eigvals = torch.linalg.eigvalsh(torch.from_numpy(self.cov_g)).detach().cpu().numpy()
         lambda_max = np.max(eigvals)
         lambda_min = np.min(eigvals)
         self.eps = (lambda_max - max_condition_number*lambda_min)/(max_condition_number - 1)
@@ -183,25 +184,29 @@ class optimizer:
         self,
         c_mu,
         Cov=None,
-        B=None,
-        D=None,
+        BD=None,
         eig_eval=None,
         counteval=None,
     ):
         # Set Selection Parameters
         #self.Nsample = 25 #int(4 + np.floor(3 * np.log(self.Ndim)))
-        mu = int(np.floor(self.Nsample / 2))
-        weights = np.log(mu + 1 / 2) - np.log(np.arange(mu) + 1)
-        weights /= np.sum(weights)
-        mu_eff = 1 / np.sum(weights**2)
+        mu = torch.tensor(int(np.floor(self.Nsample / 2)), dtype=torch.int64, device=self.device)
+        weights = torch.log(mu + 1 / 2) - torch.log(torch.arange(mu, dtype=torch.float64, device=self.device) + 1)
+        weights /= torch.sum(weights)
 
         # Initialize Dynamic Internal Parameters
         if Cov is None:
-            Cov = self.cov_g.copy()
-            Cov = np.triu(Cov) + np.triu(Cov, k=1).T
-        if D is None and B is None:
-            [D, B] = np.linalg.eigh(Cov + self.eps*np.identity(self.Ndim))
-            D = np.sqrt(np.diag(D))
+            Cov = torch.tensor(self.cov_g, dtype=torch.float64, device=self.device)
+            #Cov = torch.eye(self.Ndim, dtype=torch.float64, device=self.device)
+        else:
+            Cov = torch.tensor(Cov, dtype=torch.float64, device=self.device)
+        Cov = torch.triu(Cov) + torch.triu(Cov, diagonal=1).T
+        if BD is None:
+            D, B = torch.linalg.eigh(Cov + self.eps*torch.eye(self.Ndim, dtype=torch.float64, device=self.device))
+            D = torch.sqrt(torch.diag(D))
+            BD = B @ D
+        else:
+            BD = torch.tensor(BD, dtype=torch.float64, device=self.device)
         eig_eval = eig_eval if eig_eval is not None else 0
 
         counteval = counteval if counteval is not None else 0
@@ -210,21 +215,22 @@ class optimizer:
             t1 = time.time()
 
             # Sample Candidates
-            arz = np.random.normal(size=(self.Ndim, self.Nsample))
-            arx = B @ D @ arz
+            arz = torch.randn(self.Ndim, self.Nsample, dtype=torch.float64, device=self.device)
+            arx = BD @ arz
             
             # Cost Evaluation
-            cost, x_bin = self.get_cost_samples(arx.T)
+            cost, x_bin = self.get_cost_samples(arx.T.detach().cpu().numpy())
             sorted_index = np.argsort(cost)
+            sorted_index_torch = torch.from_numpy(sorted_index)
             cost = cost[sorted_index]
-            arx = arx[:,sorted_index]
+            arx = arx[:,sorted_index_torch]
             x_bin = x_bin[sorted_index,:]
             counteval += self.Nsample
 
             if self.x_latent_hist is None:
-                self.x_latent_hist = arx[:,0].copy()
+                self.x_latent_hist = arx[:,0].detach().cpu().numpy()
             else:
-                self.x_latent_hist = np.vstack((self.x_latent_hist, arx[:,0]))
+                self.x_latent_hist = np.vstack((self.x_latent_hist, arx[:,0].detach().cpu().numpy()))
             
             if self.best_cost_hist.size == 0:
                 new_best = True
@@ -256,9 +262,8 @@ class optimizer:
                 ), end='', flush=True)
 
             self.save_data(
-                B=B,
-                D=D,
-                Cov=Cov,
+                BD=BD.detach().cpu().numpy(),
+                Cov=Cov.detach().cpu().numpy(),
                 eig_eval=eig_eval,
                 counteval=counteval,
             )
@@ -269,14 +274,15 @@ class optimizer:
 
             # Update Covariance Matrix
             Cov = (1 - c_mu) * Cov \
-                + c_mu * (B @ D @ arz[:,:mu]) @ np.diag(weights) @ (B @ D @ arz[:,:mu]).T
+                + c_mu * (BD @ arz[:,:mu]) @ torch.diag(weights) @ (BD @ arz[:,:mu]).T
 
             # Update B and D
             if counteval - eig_eval > self.Nsample / (c_mu * self.Ndim * 10):
                 eig_eval = counteval
-                Cov = np.triu(Cov) + np.triu(Cov, k=1).T
-                [D, B] = np.linalg.eigh(Cov + self.eps*np.identity(self.Ndim))
-                D = np.sqrt(np.diag(D))
+                Cov = torch.triu(Cov) + torch.triu(Cov, diagonal=1).T
+                D, B = torch.linalg.eigh(Cov + self.eps*torch.eye(self.Ndim, dtype=torch.float64, device=self.device))
+                D = torch.sqrt(torch.diag(D))
+                BD = B @ D
             
             t2 = time.time()
             t_rem = (t2 - t1)*(self.maxiter - self.n_iter + 1)/3600
@@ -286,9 +292,11 @@ class optimizer:
             
             self.n_iter += 1
 
-    def run(self, n_seed, output_filename, eta=None, load_data=False):
+    def run(self, n_seed, output_filename, eta=None, cuda_ind=0, load_data=False):
         if comm.rank == 0:
             print('### ACMA-ES (seed = ' + str(n_seed) + ')\n', flush=True)
+        
+        self.device = 'cuda:' + str(cuda_ind) if torch.cuda.is_available() else 'cpu'
     
         np.random.seed(n_seed)
         self.output_filename = output_filename
@@ -311,8 +319,7 @@ class optimizer:
                 self.x_latent_hist = data['x_latent_hist'][:self.n_iter,:]
                 self.best_x_hist = data['best_x_hist'][:self.n_iter,:]
                 
-                B = data['B']
-                D = data['D']
+                BD = data['BD']
                 Cov = data['Cov']
 
         else:
@@ -325,8 +332,7 @@ class optimizer:
             self.cost_ensemble_sigma_hist = np.zeros(0)
             
             Cov = None
-            B = None
-            D = None
+            BD = None
             eig_eval = None
             counteval = None
         
@@ -337,8 +343,7 @@ class optimizer:
         self.ACMA_ES(
             c_mu=eta,
             Cov=Cov,
-            B=B,
-            D=D,
+            BD=BD,
             eig_eval=eig_eval,
             counteval=counteval,
         )
@@ -347,18 +352,16 @@ class optimizer:
     
     def save_data(
         self,
-        B=None,
-        D=None,
+        BD=None,
         Cov=None,
         eig_eval=None,
         counteval=None,
     ):
 
         if comm.rank == 0:
-            if B is None:
+            if BD is None:
                 with np.load(self.output_filename + "_ACMA_ES_density_hist.npz") as data:
-                    B = data['B']
-                    D = data['D']
+                    BD = data['BD']
                     Cov = data['Cov']
 
             if eig_eval is None:
@@ -379,7 +382,6 @@ class optimizer:
             np.savez(self.output_filename + "_ACMA_ES_density_hist",
                 x_latent_hist=self.x_latent_hist,
                 best_x_hist=self.best_x_hist,
-                B=B,
-                D=D,
+                BD=BD,
                 Cov=Cov,
             )

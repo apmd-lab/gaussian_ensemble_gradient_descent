@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 import gegd.parameter_processing.symmetry_operations as symOp
 import gegd.parameter_processing.density_transforms as dtf
 import time
@@ -24,6 +25,7 @@ class optimizer:
                  brush_shape='circle',
                  cost_obj=None,
                  Nthreads=1,
+                 cuda_ind=0,
                  ):
         
         self.Nx = Nx
@@ -43,6 +45,7 @@ class optimizer:
         self.high_fidelity_setting = high_fidelity_setting
         self.cost_obj = cost_obj
         self.Nthreads = Nthreads
+        self.cuda_ind = cuda_ind
         
         # Get Number of Independent Parameters
         if symmetry == 0:
@@ -59,8 +62,22 @@ class optimizer:
     
     def get_cost_samples(self, x):
         # Get Brush Binarized Densities ------------------------------------------------------------
-        x_bin = dtf.binarize(x, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.brush_shape, self.beta_proj, self.sigma_filter,
-                             upsample_ratio=self.upsample_ratio, padding=self.padding, method=self.feasible_design_generation_method, Nthreads=self.Nthreads)
+        x_bin = dtf.binarize(
+            x,
+            self.symmetry,
+            self.periodic,
+            self.Nx,
+            self.Ny,
+            self.min_feature_size,
+            self.brush_shape,
+            self.beta_proj,
+            self.sigma_filter,
+            upsample_ratio=self.upsample_ratio,
+            padding=self.padding,
+            method=self.feasible_design_generation_method,
+            Nthreads=self.Nthreads,
+            cuda_ind=self.cuda_ind,
+            )
 
         # Sample Modified Cost Function --------------------------------------------------------------
         self.cost_obj.set_accuracy(self.high_fidelity_setting)
@@ -85,10 +102,10 @@ class optimizer:
     ):
         # Set Selection Parameters
         #self.Nsample = 25 #int(4 + np.floor(3 * np.log(self.Ndim)))
-        mu = int(np.floor(self.Nsample / 2))
-        weights = np.log(mu + 1 / 2) - np.log(np.arange(mu) + 1)
-        weights /= np.sum(weights)
-        mu_eff = 1 / np.sum(weights**2)
+        mu = torch.tensor(int(np.floor(self.Nsample / 2)), dtype=torch.int64, device=self.device)
+        weights = torch.log(mu + 1 / 2) - torch.log(torch.arange(mu) + 1)
+        weights /= torch.sum(weights)
+        mu_eff = 1 / torch.sum(weights**2)
 
         # Set Adaptation Parameters
         c_c = (4 + mu_eff / self.Ndim) / (self.Ndim + 4 + 2 * mu_eff / self.Ndim)
@@ -98,13 +115,13 @@ class optimizer:
         d_sigma = 1 + 2 * np.max((0, np.sqrt((mu_eff - 1) / (self.Ndim + 1)) - 1)) + c_sigma
 
         # Initialize Dynamic Internal Parameters
-        p_c = p_c if p_c is not None else np.zeros(self.Ndim)
-        p_sigma = p_sigma if p_sigma is not None else np.zeros(self.Ndim)
-        B = B if B is not None else np.identity(self.Ndim)
-        D = D if D is not None else np.identity(self.Ndim)
-        xmean = xmean if xmean is not None else np.zeros(self.Ndim)
+        p_c = torch.tensor(p_c, dtype=torch.float64, device=self.device) if p_c is not None else torch.zeros(self.Ndim, dtype=torch.float64, device=self.device)
+        p_sigma = torch.tensor(p_sigma, dtype=torch.float64, device=self.device) if p_sigma is not None else torch.zeros(self.Ndim, dtype=torch.float64, device=self.device)
+        B = torch.tensor(B, dtype=torch.float64, device=self.device) if B is not None else torch.identity(self.Ndim, dtype=torch.float64, device=self.device)
+        D = torch.tensor(D, dtype=torch.float64, device=self.device) if D is not None else torch.identity(self.Ndim, dtype=torch.float64, device=self.device)
+        xmean = torch.tensor(xmean, dtype=torch.float64, device=self.device) if xmean is not None else torch.zeros(self.Ndim, dtype=torch.float64, device=self.device)
         sigma = sigma if sigma is not None else 0.5
-        Cov = Cov if Cov is not None else np.identity(self.Ndim)
+        Cov = torch.tensor(Cov, dtype=torch.float64, device=self.device) if Cov is not None else torch.identity(self.Ndim, dtype=torch.float64, device=self.device)
         eig_eval = eig_eval if eig_eval is not None else 0
         chi_N = self.Ndim**0.5 * (1 - 1 / (4 * self.Ndim) + 1 / (21 * self.Ndim**2))
 
@@ -115,25 +132,27 @@ class optimizer:
 
             # Sample Candidates
             arz = np.random.normal(size=(self.Ndim, self.Nsample))
+            arz = torch.tensor(arz, dtype=torch.float64, device=self.device)
             arx = xmean[:,np.newaxis] + sigma * (B @ D @ arz)
             
             # Cost Evaluation
-            cost, x_bin = self.get_cost_samples(arx.T)
+            cost, x_bin = self.get_cost_samples(arx.T.detach().cpu().numpy())
             sorted_index = np.argsort(cost)
+            sorted_index_tensor = torch.tensor(sorted_index, dtype=torch.int64, device=self.device)
             cost = cost[sorted_index]
-            arx = arx[:,sorted_index]
+            arx = arx[:,sorted_index_tensor]
             x_bin = x_bin[sorted_index,:]
             counteval += self.Nsample
 
             if self.x_mean_hist is None:
-                self.x_mean_hist = xmean.copy()
+                self.x_mean_hist = xmean.detach().cpu().numpy().copy()
             else:
-                self.x_mean_hist = np.vstack((self.x_mean_hist, xmean))
+                self.x_mean_hist = np.vstack((self.x_mean_hist, xmean.detach().cpu().numpy()))
 
             if self.x_latent_hist is None:
-                self.x_latent_hist = arx[:,0].copy()
+                self.x_latent_hist = arx[:,0].detach().cpu().numpy().copy()
             else:
-                self.x_latent_hist = np.vstack((self.x_latent_hist, arx[:,0]))
+                self.x_latent_hist = np.vstack((self.x_latent_hist, arx[:,0].detach().cpu().numpy()))
             
             if self.best_cost_hist.size == 0:
                 new_best = True
@@ -171,13 +190,13 @@ class optimizer:
                 ), flush=True)
 
             self.save_data(
-                p_c=p_c,
-                p_sigma=p_sigma,
-                B=B,
-                D=D,
-                xmean=xmean,
+                p_c=p_c.detach().cpu().numpy(),
+                p_sigma=p_sigma.detach().cpu().numpy(),
+                B=B.detach().cpu().numpy(),
+                D=D.detach().cpu().numpy(),
+                xmean=xmean.detach().cpu().numpy(),
                 sigma=sigma,
-                Cov=Cov,
+                Cov=Cov.detach().cpu().numpy(),
                 eig_eval=eig_eval,
                 counteval=counteval,
             )
@@ -191,24 +210,24 @@ class optimizer:
             zmean = arz[:,:mu] @ weights
 
             # Update Evolution Path and Step Size
-            p_sigma = (1 - c_sigma) * p_sigma + np.sqrt(c_sigma * (2 - c_sigma) * mu_eff) * (B @ zmean)
-            h_sigma = np.linalg.norm(p_sigma) / np.sqrt(1 - (1 - c_sigma)**(2 * counteval / self.Nsample)) / chi_N < 1.4 + 2 / (self.Ndim + 1)
-            p_c = (1 - c_c) * p_c + h_sigma * np.sqrt(c_c * (2 - c_c) * mu_eff) * (B @ D @ zmean)
+            p_sigma = (1 - c_sigma) * p_sigma + torch.sqrt(c_sigma * (2 - c_sigma) * mu_eff) * (B @ zmean)
+            h_sigma = torch.linalg.norm(p_sigma) / torch.sqrt(1 - (1 - c_sigma)**(2 * counteval / self.Nsample)) / chi_N < 1.4 + 2 / (self.Ndim + 1)
+            p_c = (1 - c_c) * p_c + h_sigma * torch.sqrt(c_c * (2 - c_c) * mu_eff) * (B @ D @ zmean)
 
             # Update Covariance Matrix
             Cov = (1 - c_1 - c_mu) * Cov \
                 + c_1 * (p_c @ p_c.T + (1 - h_sigma) * c_c * (2 - c_c) * Cov) \
-                + c_mu * (B @ D @ arz[:,:mu]) @ np.diag(weights) @ (B @ D @ arz[:,:mu]).T
+                + c_mu * (B @ D @ arz[:,:mu]) @ torch.diag(weights) @ (B @ D @ arz[:,:mu]).T
             
             # Update Step Size
-            sigma = sigma * np.exp((c_sigma / d_sigma) * (np.linalg.norm(p_sigma) / chi_N - 1))
+            sigma = sigma * torch.exp((c_sigma / d_sigma) * (torch.linalg.norm(p_sigma) / chi_N - 1))
 
             # Update B and D
             if counteval - eig_eval > self.Nsample / ((c_1 + c_mu) * self.Ndim * 10):
                 eig_eval = counteval
-                Cov = np.triu(Cov) + np.triu(Cov, k=1).T
-                [D, B] = np.linalg.eigh(Cov)
-                D = np.sqrt(np.diag(D))
+                Cov = torch.triu(Cov) + torch.triu(Cov, diagonal=1).T
+                [D, B] = torch.linalg.eigh(Cov)
+                D = torch.sqrt(torch.diag(D))
             
             self.n_iter += 1
 

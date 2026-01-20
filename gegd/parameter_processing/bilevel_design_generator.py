@@ -124,7 +124,7 @@ def two_phase_projection(
     w_s = (1 + alpha_s) / (1 + alpha_s * torch.exp(2 * n_s * (1 - x)))
     w_v = -(1 + alpha_v) / (1 + alpha_v * torch.exp(2 * n_v * (1 + x)))
     
-    kernel = conic_filter(mfs).to(dtype=torch.float64)
+    kernel = conic_filter(mfs).to(dtype=torch.float64, device=device)
     padding_amount = kernel.shape[0] // 2
     
     if periodic:
