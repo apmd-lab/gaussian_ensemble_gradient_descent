@@ -242,10 +242,19 @@ class optimizer:
     
     def save_data(self, x=0):
         if comm.rank == 0:
+            if self.best_chromosome_hist.ndim == 1:
+                best_chromosome_final = self.best_chromosome_hist.copy()
+                best_x_binary_final = self.best_x_binary_hist.copy()
+            else:
+                best_chromosome_final = self.best_chromosome_hist[-1,:]
+                best_x_binary_final = self.best_x_binary_hist[-1,:]
+
             np.savez(
                 self.output_filename + "_AF_GA_results",
                 best_cost_hist=self.best_cost_hist,
                 n_iter=self.n_iter,
+                best_chromosome_final=best_chromosome_final,
+                best_x_binary_final=best_x_binary_final,
             )
                      
             np.savez(

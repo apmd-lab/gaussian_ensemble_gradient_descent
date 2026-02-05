@@ -25,6 +25,7 @@ class optimizer:
                  low_fidelity_setting,
                  min_feature_size,
                  sigma_RBF,
+                 perturbation_rank=1,
                  var_ensemble=1.0,
                  asymmetry_factor=0.5,
                  upsample_ratio=1,
@@ -52,6 +53,7 @@ class optimizer:
         self.beta_proj_sigma = beta_proj
         self.feasible_design_generation_method = feasible_design_generation_method
         self.min_feature_size = min_feature_size
+        self.perturbation_rank = perturbation_rank
         self.var_ensemble = var_ensemble
         self.asymmetry_factor = asymmetry_factor
         self.upsample_ratio = upsample_ratio
@@ -65,6 +67,7 @@ class optimizer:
         self.cost_obj = cost_obj
         self.Nthreads = Nthreads
         self.verbosity = verbosity
+        self.cuda_ind = cuda_ind
 
         self.device = torch.device(f'cuda:{cuda_ind}') if torch.cuda.is_available() else torch.device('cpu')
         
@@ -193,8 +196,8 @@ class optimizer:
         self.cov_g = torch.tensor(self.cov_g + eps*np.identity(self.Ndim), dtype=torch.float64, device=self.device)
     
     def construct_cov_matrix(self, s):
+        s = s.reshape(self.Ndim, self.perturbation_rank, order='F')
         s = torch.tensor(s, dtype=torch.float64, device=self.device)
-        s = s.unsqueeze(-1)
 
         cov = self.var_ensemble*(self.cov_g + s @ s.T)
         cov_inv = torch.linalg.inv(cov)
@@ -202,9 +205,9 @@ class optimizer:
         return cov, cov_inv
     
     def s_derivative(self, s, dx, cov_inv, p):
+        s = s.reshape(self.Ndim, self.perturbation_rank, order='F')
         s = torch.tensor(s, dtype=torch.float64, device=self.device)
         dx = torch.tensor(dx, dtype=torch.float64, device=self.device)
-        s = s.unsqueeze(-1)
         dx = dx.unsqueeze(-1)
 
         z = cov_inv @ dx
@@ -243,12 +246,12 @@ class optimizer:
 
         t1 = time.time()
         f = np.zeros(self.Nensemble)
-        f_logDeriv = np.zeros((self.Nensemble, self.Ndim))
+        f_logDeriv = np.zeros((self.Nensemble, self.Ndim, self.perturbation_rank))
         for n in range(self.Nensemble):
             f_temp = self.cost_obj.get_cost(x_sample[n,:], False)
             f_shifted = (f_temp - self.cost_threshold)/(self.cost_threshold + 1)
             f[n] = -np.exp(-self.coeff_exp*f_shifted)
-            f_logDeriv[n,:] = self.s_derivative(s, dx[n,:], cov_inv, f[n])
+            f_logDeriv[n,:,:] = self.s_derivative(s, dx[n,:], cov_inv, f[n])
         t2 = time.time()
         if comm.rank == 0 and self.verbosity >= 2:
             print('--> Cost Computation: ', t2-t1, flush=True)
@@ -261,16 +264,16 @@ class optimizer:
         self.cost_obj.set_accuracy(self.low_fidelity_setting)
         
         f_ctrl_all = np.zeros(self.r_CV*self.Nensemble)
-        f_ctrl_logDeriv_all = np.zeros((self.r_CV*self.Nensemble, self.Ndim))
+        f_ctrl_logDeriv_all = np.zeros((self.r_CV*self.Nensemble, self.Ndim, self.perturbation_rank))
         for n in range(self.r_CV*self.Nensemble):
             f_temp = self.cost_obj.get_cost(x_sample[n,:], False)
             f_shifted = (f_temp - self.cost_threshold)/(self.cost_threshold + 1)
             f_ctrl_all[n] = -np.exp(-self.coeff_exp*f_shifted)
-            f_ctrl_logDeriv_all[n,:] = self.s_derivative(s, dx[n,:], cov_inv, f_ctrl_all[n])
+            f_ctrl_logDeriv_all[n,:,:] = self.s_derivative(s, dx[n,:], cov_inv, f_ctrl_all[n])
         
         # Expectation of the Control Variate Function -----------------------------------------------------
         ctrlVarExp_f = np.mean(f_ctrl_all)
-        ctrlVarExp_s = np.mean(f_ctrl_logDeriv_all, axis=0)
+        ctrlVarExp_s = np.mean(f_ctrl_logDeriv_all, axis=0, keepdims=True)
 
         # Control Variate Coefficient (expectation) --------------------------------------------------------------------
         f_ctrl = f_ctrl_all[:self.Nensemble]
@@ -286,7 +289,7 @@ class optimizer:
         
         # Control Variate Coefficient (expectation gradient wrt s) --------------------------------------------------------------------
         f_s = f_logDeriv.copy()
-        f_ctrl_s = f_ctrl_logDeriv_all[:self.Nensemble,:]
+        f_ctrl_s = f_ctrl_logDeriv_all[:self.Nensemble,:,:]
         mean_f = np.mean(f_s, axis=0)
         mean_ctrl = np.mean(f_ctrl_s, axis=0)
         
@@ -294,9 +297,9 @@ class optimizer:
         var_f = (1/(self.Nensemble - 1))*np.sum((f_s - mean_f)**2, axis=0)
         var_ctrl = (1/(self.Nensemble - 1))*np.sum((f_ctrl_s - mean_ctrl)**2, axis=0)
 
-        weights = np.ones(self.Ndim) #1/np.hstack((sigma_ensemble, sigma_ensemble))**2
-        ctrlVarCoeff_s = np.average(cov_f_ctrl, weights=weights)/np.average(var_ctrl, weights=weights)
-        corr_s = cov_f_ctrl/np.sqrt(var_f*var_ctrl)
+        weights = np.ones(self.Ndim*self.perturbation_rank) #1/np.hstack((sigma_ensemble, sigma_ensemble))**2
+        ctrlVarCoeff_s = np.average(cov_f_ctrl.reshape(-1), weights=weights)/np.average(var_ctrl.reshape(-1), weights=weights)
+        corr_s = (cov_f_ctrl/np.sqrt(var_f*var_ctrl)).reshape(-1, order='F')
 
         # Control Variate Estimation of the expectation --------------------------------------------------------------
         if self.r_CV == 1:
@@ -310,8 +313,14 @@ class optimizer:
             jac_fp_ensemble -= ctrlVarCoeff_s*(f_ctrl_s - ctrlVarExp_s)
 
         jac_fp_ensemble = np.mean(jac_fp_ensemble, axis=0)
-        jac_fp_ensemble_sym = symOp.symmetrize_jacobian(jac_fp_ensemble, self.symmetry, self.Nx, self.Ny)
-        jac_latent_ensemble = dtf.backprop_filter_and_project(jac_fp_ensemble_sym, s, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, 0, padding=self.padding)
+
+        s_reshape = s.reshape(self.Ndim, self.perturbation_rank)
+        jac_latent_ensemble = np.zeros((self.Ndim, self.perturbation_rank))
+        for r in range(self.perturbation_rank):
+            jac_fp_ensemble_sym = symOp.symmetrize_jacobian(jac_fp_ensemble[:,r], self.symmetry, self.Nx, self.Ny)
+            jac_latent_ensemble[:,r] = dtf.backprop_filter_and_project(jac_fp_ensemble_sym, s_reshape[:,r], self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, 0, padding=self.padding)
+        
+        jac_latent_ensemble = jac_latent_ensemble.reshape(-1, order='F')
 
         return np.mean(f), np.std(f), np.mean(f_ctrl_all), np.std(f_ctrl_all), jac_latent_ensemble, ctrlVarCoeff_s, corr_f, corr_s, f_best, x_best
     
@@ -364,8 +373,12 @@ class optimizer:
             var_reduction = (1 - ((self.r_CV - 1)/self.r_CV)*corr_s**2)/self.Nensemble
             
             t1 = time.time()
-            s_filtered = dtf.filter_and_project(s, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, 0, padding=self.padding)
-            mu = torch.tensor(self.asymmetry_factor * s_filtered, dtype=torch.float64, device=self.device).unsqueeze(0)
+            s_reshape = s.reshape(self.Ndim, self.perturbation_rank, order='F')
+            s_filtered = np.zeros((self.Ndim, self.perturbation_rank))
+            for r in range(self.perturbation_rank):
+                s_filtered[:,r] = dtf.filter_and_project(s_reshape[:,r], self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, 0, padding=self.padding)
+            mu = torch.tensor(self.asymmetry_factor * np.sum(s_filtered, axis=1), dtype=torch.float64, device=self.device).unsqueeze(0)
+            s_filtered = s_filtered.reshape(-1, order='F')
             cov, cov_inv = self.construct_cov_matrix(s_filtered)
             L = torch.linalg.cholesky(cov)
             lam = torch.linalg.eigvalsh(cov)
@@ -534,7 +547,7 @@ class optimizer:
             
             if s0 is None:
                 # Initial Structure
-                s0 = np.random.normal(0, s_mag0, self.Ndim)
+                s0 = np.random.normal(0, s_mag0, size=self.Ndim*self.perturbation_rank)
             
             jac_mean = None
             jac_var = None
@@ -570,6 +583,13 @@ class optimizer:
                     jac_mean = data['jac_mean']
                     jac_var = data['jac_var']
         
+            if self.best_x_hist.ndim == 1:
+                best_x_final = self.best_x_hist.copy()
+                s_final = self.s_hist.copy()
+            else:
+                best_x_final = self.best_x_hist[-1,:]
+                s_final = self.s_hist[-1,:]
+
             # Customize below
             np.savez(self.output_filename + "_D_GEGD_results",
                 N_high_fidelity_hist=self.N_high_fidelity_hist,
@@ -582,7 +602,10 @@ class optimizer:
                 cost_ensemble_ctrl_sigma_hist=self.cost_ensemble_ctrl_sigma_hist,
                 best_cost_hist=self.best_cost_hist,
                 ctrlVarCoeff_s_hist=self.ctrlVarCoeff_s_hist,
+                condition_number_hist=self.condition_number_hist,
                 corr_f_hist=self.corr_f_hist,
+                best_x_final=best_x_final,
+                s_final=s_final,
                 n_iter=self.n_iter,
                 adam_iter=adam_iter,
                 )

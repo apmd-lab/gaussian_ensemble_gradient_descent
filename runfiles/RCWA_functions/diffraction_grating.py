@@ -1,7 +1,7 @@
 import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
-sys.path.insert(0, directory[:-17])
+sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
 
 import numpy as np
 import torcwa
@@ -17,12 +17,13 @@ class custom_objective:
                  mat_multilayer,
                  Nthreads,
                  minimax=False,
+                 cuda_ind=0,
                  ):
                  
         torch.set_warn_always(False)
         torch.set_num_threads(Nthreads)
         torch.set_num_interop_threads(Nthreads)
-        self.device = 'cpu'
+        self.device = 'cuda:' + str(cuda_ind) if torch.cuda.is_available() else 'cpu'
         torcwa.rcwa_geo.device = self.device
         
         self.minimax = minimax

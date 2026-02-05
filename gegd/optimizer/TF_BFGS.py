@@ -21,6 +21,7 @@ class optimizer:
                  brush_shape='circle',
                  cost_obj=None,
                  Nthreads=1,
+                 cuda_ind=0,
                  ):
                        
         self.Nx = Nx
@@ -34,6 +35,7 @@ class optimizer:
         self.high_fidelity_setting = high_fidelity_setting
         self.cost_obj = cost_obj
         self.Nthreads = Nthreads
+        self.cuda_ind = cuda_ind
         
         self.cost_obj.set_accuracy(self.high_fidelity_setting)
         
@@ -194,7 +196,7 @@ class optimizer:
                      x_fin=self.x_fin,
                      beta=beta)
                      
-            np.savez(self.output_filename + "_TF_density_hist",
-                     x_hist=self.x_hist,
-                     x_latent_hist=self.x_latent_hist,
-                     x0=x0)
+            #np.savez(self.output_filename + "_TF_density_hist",
+            #         x_hist=self.x_hist,
+            #         x_latent_hist=self.x_latent_hist,
+            #         x0=x0)

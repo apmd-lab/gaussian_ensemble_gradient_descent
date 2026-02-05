@@ -80,118 +80,112 @@ def binarize(
     upsample_ratio=1,
     padding=None,
     method='brush',
-    output_details=False,
     Nthreads=1,
     print_runtime_details=False,
     cuda_ind=0,
 ):
     if method == 'brush':
+        if dx is not None:
+            N_designs = dx.shape[0]
+        else:
+            N_designs = x.shape[0]
+
         if padding is None:
             x_reward = np.zeros((N_designs, Nx, Ny)).astype(np.float32)
         else:
             x_reward = np.zeros((N_designs, Nx + 2*min_feature_size, Ny + 2*min_feature_size)).astype(np.float32)
 
         for n in range(N_designs):
-            if dx is not None:
-                x_fp = filter_and_project(x, symmetry, periodic, Nx, Ny, min_feature_size, sigma_filter, beta_proj, padding=padding).reshape(-1) + dx[n,:]
-            else:
-                x_fp = filter_and_project(x[n,:], symmetry, periodic, Nx, Ny, min_feature_size, sigma_filter, beta_proj, padding=padding)
-        
             if padding is None:
-                x_reward[n,:,:] = symOp.symmetrize(x_fp, symmetry, Nx, Ny)
+                x_reward[n,:,:] = symOp.symmetrize(x[n,:], symmetry, Nx, Ny)
             else:
                 x_reward[n,:,:] = padding.copy()
-                x_reward[n,min_feature_size:-min_feature_size,min_feature_size:-min_feature_size] = symOp.symmetrize(x_fp, symmetry, Nx, Ny)
+                x_reward[n,min_feature_size:-min_feature_size,min_feature_size:-min_feature_size] = symOp.symmetrize(x[n,:], symmetry, Nx, Ny)
         
         t1 = time.time()
-        try:
-            if min_feature_size is not None:
-                if Nthreads > 0:
+        if min_feature_size is not None:
+            if Nthreads > 0:
+                if upsample_ratio == 1:
+                    x_brush = FDG.make_feasible_parallel(
+                        x_reward,
+                        min_feature_size,
+                        periodic,
+                        symmetry,
+                        2,
+                        upsample_ratio,
+                        Nthreads).reshape(N_designs, -1)
+                    
+                else:
+                    x_brush_lowres = FDG.make_feasible_parallel(
+                        x_reward,
+                        min_feature_size,
+                        periodic,
+                        symmetry,
+                        2,
+                        1,
+                        Nthreads).reshape(N_designs, Nx, Ny)
+                    
+                    x_brush = FDG.make_feasible_parallel(
+                        2*x_brush_lowres.astype(np.float32)-1,
+                        min_feature_size,
+                        periodic,
+                        symmetry,
+                        2,
+                        upsample_ratio,
+                        Nthreads).reshape(N_designs, -1)
+            
+            else:
+                quo, rem = divmod(N_designs, comm.size)
+                data_size = np.array([quo + 1 if p < rem else quo for p in range(comm.size)]).astype(np.int32)
+                data_disp = np.array([sum(data_size[:p]) for p in range(comm.size + 1)])
+                x_reward_proc = x_reward[data_disp[comm.rank]:data_disp[comm.rank+1],:,:]
+                
+                if data_size[comm.rank] > 0:
                     if upsample_ratio == 1:
-                        x_brush = FDG.make_feasible_parallel(
-                            x_reward,
+                        x_brush_proc = FDG.make_feasible_parallel(
+                            x_reward_proc,
                             min_feature_size,
                             periodic,
                             symmetry,
                             2,
                             upsample_ratio,
-                            Nthreads).reshape(N_designs, -1)
+                            1).reshape(data_size[comm.rank], -1).astype(np.float64)
                         
                     else:
-                        x_brush_lowres = FDG.make_feasible_parallel(
-                            x_reward,
+                        x_brush_lowres_proc = FDG.make_feasible_parallel(
+                            x_reward_proc,
                             min_feature_size,
                             periodic,
                             symmetry,
                             2,
                             1,
-                            Nthreads).reshape(N_designs, Nx, Ny)
+                            1).reshape(data_size[comm.rank], Nx, Ny)
                         
-                        x_brush = FDG.make_feasible_parallel(
-                            2*x_brush_lowres.astype(np.float32)-1,
+                        x_brush_proc = FDG.make_feasible_parallel(
+                            2*x_brush_lowres_proc.astype(np.float32)-1,
                             min_feature_size,
                             periodic,
                             symmetry,
                             2,
                             upsample_ratio,
-                            Nthreads).reshape(N_designs, -1)
-                
+                            1).reshape(data_size[comm.rank], -1).astype(np.float64)
                 else:
-                    quo, rem = divmod(N_designs, comm.size)
-                    data_size = np.array([quo + 1 if p < rem else quo for p in range(comm.size)]).astype(np.int32)
-                    data_disp = np.array([sum(data_size[:p]) for p in range(comm.size + 1)])
-                    x_reward_proc = x_reward[data_disp[comm.rank]:data_disp[comm.rank+1],:,:]
+                    x_brush_proc = np.array([]).astype(np.float64)
+                
+                if padding is None:
+                    data_size_temp = data_size*Nx*Ny*upsample_ratio**2
+                    data_disp_temp = np.array([sum(data_size_temp[:p]) for p in range(comm.size)])
                     
-                    if data_size[comm.rank] > 0:
-                        if upsample_ratio == 1:
-                            x_brush_proc = FDG.make_feasible_parallel(
-                                x_reward_proc,
-                                min_feature_size,
-                                periodic,
-                                symmetry,
-                                2,
-                                upsample_ratio,
-                                1).reshape(data_size[comm.rank], -1).astype(np.float64)
-                            
-                        else:
-                            x_brush_lowres_proc = FDG.make_feasible_parallel(
-                                x_reward_proc,
-                                min_feature_size,
-                                periodic,
-                                symmetry,
-                                2,
-                                1,
-                                1).reshape(data_size[comm.rank], Nx, Ny)
-                            
-                            x_brush_proc = FDG.make_feasible_parallel(
-                                2*x_brush_lowres_proc.astype(np.float32)-1,
-                                min_feature_size,
-                                periodic,
-                                symmetry,
-                                2,
-                                upsample_ratio,
-                                1).reshape(data_size[comm.rank], -1).astype(np.float64)
-                    else:
-                        x_brush_proc = np.array([]).astype(np.float64)
+                    x_brush_temp = np.zeros(N_designs*Nx*Ny*upsample_ratio**2)
+                    comm.Allgatherv(x_brush_proc.reshape(-1), [x_brush_temp, data_size_temp, data_disp_temp, MPI.DOUBLE])
+                    x_brush = x_brush_temp.reshape(N_designs, -1)
+                else:
+                    data_size_temp = data_size*(Nx + 2*min_feature_size)*(Ny + 2*min_feature_size)*upsample_ratio**2
+                    data_disp_temp = np.array([sum(data_size_temp[:p]) for p in range(comm.size)])
                     
-                    if padding is None:
-                        data_size_temp = data_size*Nx*Ny*upsample_ratio**2
-                        data_disp_temp = np.array([sum(data_size_temp[:p]) for p in range(comm.size)])
-                        
-                        x_brush_temp = np.zeros(N_designs*Nx*Ny*upsample_ratio**2)
-                        comm.Allgatherv(x_brush_proc.reshape(-1), [x_brush_temp, data_size_temp, data_disp_temp, MPI.DOUBLE])
-                        x_brush = x_brush_temp.reshape(N_designs, -1)
-                    else:
-                        data_size_temp = data_size*(Nx + 2*min_feature_size)*(Ny + 2*min_feature_size)*upsample_ratio**2
-                        data_disp_temp = np.array([sum(data_size_temp[:p]) for p in range(comm.size)])
-                        
-                        x_brush_temp = np.zeros(N_designs*(Nx + 2*min_feature_size)*(Ny + 2*min_feature_size)*upsample_ratio**2)
-                        comm.Allgatherv(x_brush_proc.reshape(-1), [x_brush_temp, data_size_temp, data_disp_temp, MPI.DOUBLE])
-                        x_brush = x_brush_temp.reshape(N_designs, -1)
-        except:
-            if comm.rank == 0:
-                np.savez(os.path.join(os.path.expanduser("~"), "debug_brush"), x_sym=x_sym)
-            assert False
+                    x_brush_temp = np.zeros(N_designs*(Nx + 2*min_feature_size)*(Ny + 2*min_feature_size)*upsample_ratio**2)
+                    comm.Allgatherv(x_brush_proc.reshape(-1), [x_brush_temp, data_size_temp, data_disp_temp, MPI.DOUBLE])
+                    x_brush = x_brush_temp.reshape(N_designs, -1)
         
         t2 = time.time()
 
@@ -207,16 +201,18 @@ def binarize(
     elif method == 'two_phase_projection':
         if dx is not None:
             N_designs = dx.shape[0]
-            x_reward = np.zeros_like(dx).astype(np.float64)
         else:
             N_designs = x.shape[0]
-            x_reward = np.zeros_like(x).astype(np.float64)
-        
-        for n in range(N_designs):
-            if dx is not None:
-                x_reward[n,:] = filter_and_project(x, symmetry, periodic, Nx, Ny, min_feature_size, sigma_filter, beta_proj, padding=padding).reshape(-1) + dx[n,:]
-            else:
-                x_reward[n,:] = filter_and_project(x[n,:], symmetry, periodic, Nx, Ny, min_feature_size, sigma_filter, beta_proj, padding=padding)
+
+        if dx is not None:
+            x_reward = x + dx
+        else:
+            x_reward = x.copy()
+
+        #cnt = 0
+        #while os.path.exists('x_reward' + str(cnt) + '.npz'):
+        #    cnt += 1
+        #np.savez('x_reward' + str(cnt) + '.npz', x_reward=x_reward)
 
         t1 = time.time()
         generator = bdg.conditional_generator(
@@ -239,9 +235,5 @@ def binarize(
         if print_runtime_details:
             if comm.rank == 0:
                 print("--> Two Phase Projection Generator Runtime: " + str(t2 - t1) + " s", flush=True)
-    
-    if output_details:
-        return np.squeeze(x_reward), np.squeeze(x_bin)
-    
-    else:
-        return np.squeeze(x_bin)
+
+    return np.squeeze(x_bin)

@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from scipy.ndimage import gaussian_filter
 from scipy.interpolate import interpn
 from itertools import product
@@ -24,7 +25,7 @@ class optimizer:
                  low_fidelity_setting,
                  min_feature_size,
                  sigma_RBF,
-                 sigma_ensemble_max=1.0,
+                 sigma_ensemble=1.0,
                  upsample_ratio=1,
                  beta_proj=8,
                  feasible_design_generation_method='brush',
@@ -34,6 +35,7 @@ class optimizer:
                  cost_threshold=0,
                  cost_obj=None,
                  Nthreads=1,
+                 cuda_ind=0,
                  verbosity=1,
                  ):
         
@@ -50,7 +52,7 @@ class optimizer:
         self.beta_proj_sigma = beta_proj
         self.feasible_design_generation_method = feasible_design_generation_method
         self.min_feature_size = min_feature_size
-        self.sigma_ensemble_max = sigma_ensemble_max
+        self.sigma_ensemble = sigma_ensemble
         self.upsample_ratio = upsample_ratio
         self.brush_shape = brush_shape
         self.sigma_filter = sigma_RBF #min_feature_size/2/np.sqrt(2)
@@ -62,6 +64,8 @@ class optimizer:
         self.cost_threshold = cost_threshold
         self.cost_obj = cost_obj
         self.Nthreads = Nthreads
+        self.cuda_ind = cuda_ind
+        self.device = 'cuda:' + str(cuda_ind) if torch.cuda.is_available() else 'cpu'
         self.verbosity = verbosity
         
         # Get Number of Independent Parameters
@@ -100,8 +104,17 @@ class optimizer:
             t2 = time.time()
             if comm.rank == 0 and self.verbosity >= 2:
                 print('--> Gaussian Covariance Construction: ', t2-t1, flush=True)
+        
+        elif self.covariance_type == 'gaussian_adaptive':
+            self.Nsigma = 1
+
+            t1 = time.time()
+            self.construct_gaussian_covariance()
+            t2 = time.time()
+            if comm.rank == 0 and self.verbosity >= 2:
+                print('--> Gaussian Covariance Construction: ', t2-t1, flush=True)
     
-    def construct_gaussian_covariance(self, max_condition_number=1e4):
+    def construct_gaussian_covariance(self, projection_target=5, max_condition_number=1e4):
         self.cov_g = np.zeros((self.Ndim, self.Ndim))
         
         if self.symmetry == 0:
@@ -111,6 +124,7 @@ class optimizer:
                 kernel = gaussian_filter(delta, self.sigma_RBF, mode='wrap')
             else:
                 kernel = gaussian_filter(delta, self.sigma_RBF, mode='constant')
+            #kernel = np.tanh(projection_target*kernel/np.max(kernel))
         
             for i in range(self.Nx):
                 for j in range(self.Ny):
@@ -137,6 +151,7 @@ class optimizer:
                         kernel = gaussian_filter(delta, self.sigma_RBF, mode='wrap')
                     else:
                         kernel = gaussian_filter(delta, self.sigma_RBF, mode='constant')
+                    #kernel = np.tanh(projection_target*kernel/np.max(kernel))
                     
                     self.cov_g[i*self.Ny+j,:] = symOp.desymmetrize(kernel, self.symmetry, self.Nx, self.Ny)
         
@@ -162,6 +177,7 @@ class optimizer:
                         kernel = gaussian_filter(delta, self.sigma_RBF, mode='wrap')
                     else:
                         kernel = gaussian_filter(delta, self.sigma_RBF, mode='constant')
+                    #kernel = np.tanh(projection_target*kernel/np.max(kernel))
                     
                     self.cov_g[i*DOF_y+j,:] = symOp.desymmetrize(kernel, self.symmetry, self.Nx, self.Ny)
         
@@ -192,6 +208,7 @@ class optimizer:
                     kernel = gaussian_filter(delta, self.sigma_RBF, mode='wrap')
                 else:
                     kernel = gaussian_filter(delta, self.sigma_RBF, mode='constant')
+                #kernel = np.tanh(projection_target*kernel/np.max(kernel))
                 
                 self.cov_g[i,:] = symOp.desymmetrize(kernel, self.symmetry, self.Nx, self.Ny)
         
@@ -205,10 +222,11 @@ class optimizer:
         eps = max(eps, 0)
         
         self.cov_g = self.cov_g + eps*np.identity(self.Ndim)
-        self.cov_g_inv = np.linalg.inv(self.cov_g)
-        self.L_g = np.linalg.cholesky(self.cov_g)
+        cov_g_tensor = torch.tensor(self.cov_g, dtype=torch.float64, device=self.device)
+        self.cov_g_inv = torch.linalg.inv(cov_g_tensor).detach().cpu().numpy()
+        self.L_g = torch.linalg.cholesky(cov_g_tensor).detach().cpu().numpy()
     
-    def construct_cov_matrix(self, sigma):
+    def construct_cov_matrix(self, mu, sigma):
         if self.covariance_type == 'constant':
             cov = sigma**2*np.identity(self.Ndim)
             cov_inv = (1/sigma**2)*np.identity(self.Ndim)
@@ -222,42 +240,164 @@ class optimizer:
             cov_inv = (1/sigma**2)*self.cov_g_inv
         
         elif self.covariance_type == 'gaussian_diagonal':
-            cov = np.diag(sigma) @ self.cov_g @ np.diag(sigma)
-            cov_inv = np.diag(1/sigma) @ self.cov_g_inv @ np.diag(1/sigma)
+            cov = sigma[:,np.newaxis] * self.cov_g * sigma[np.newaxis,:]
+            cov_inv = (1/sigma[:,np.newaxis]) * self.cov_g_inv * (1/sigma[np.newaxis,:])
+        
+        elif self.covariance_type == 'gaussian_adaptive':
+            sigma_diag = np.exp(-mu**2 / (2 * sigma**2))
+            cov = sigma_diag[:,np.newaxis] * self.cov_g * sigma_diag[np.newaxis,:]
+            cov_inv = (1/sigma_diag[:,np.newaxis]) * self.cov_g_inv * (1/sigma_diag[np.newaxis,:])
         
         return cov, cov_inv
     
-    def mu_derivative(self, dx, cov_inv, p):
+    def mu_derivative(self, mu, sigma, dx, cov_inv, p):
+        mu = torch.tensor(mu, dtype=torch.float64, device=self.device)
+        sigma = torch.tensor(sigma, dtype=torch.float64, device=self.device)
+        dx = torch.tensor(dx, dtype=torch.float64, device=self.device)
+        cov_g = torch.tensor(self.cov_g, dtype=torch.float64, device=self.device)
+        cov_inv = torch.tensor(cov_inv, dtype=torch.float64, device=self.device)
+        p = torch.tensor(p, dtype=torch.float64, device=self.device)
         
-        return (cov_inv @ dx)*p
+        mu = mu.unsqueeze(0).unsqueeze(-1) # (1, Ndim, 1)
+        sigma = sigma.unsqueeze(0).unsqueeze(-1) # (1, Ndim, 1)
+        dx = dx.unsqueeze(-1) # (Nsample, Ndim, 1)
+        cov_g = cov_g.unsqueeze(0) # (1, Ndim, Ndim)
+        cov_inv = cov_inv.unsqueeze(0) # (1, Ndim, Ndim)
+        p = p.unsqueeze(-1).unsqueeze(-1) # (Nsample, 1, 1)
+
+        grad_mean = (cov_inv @ dx) * p
+
+        if self.covariance_type == 'gaussian_adaptive':
+            z = cov_inv @ dx # (Nsample, Ndim, 1)
+            sigma_diag = torch.exp(-mu**2 / (2 * sigma**2)) # (1, Ndim, 1)
+            B = cov_g*sigma_diag # (1, Ndim, Ndim)
+            Bz = B @ z # (Nsample, Ndim, 1)
+            A_diag = z*Bz # (Nsample, Ndim, 1)
+        
+            grad_cov = (A_diag - 1/sigma_diag) * p * (-1 / sigma**2) * mu * torch.exp(-mu**2 / (2 * sigma**2))
+        
+        else:
+            grad_cov = torch.zeros_like(grad_mean, dtype=torch.float64, device=self.device)
+
+        grad = grad_mean + grad_cov
+
+        return np.squeeze(grad.detach().cpu().numpy())
     
     def sigma_derivative(self, dx, sigma, cov_inv, p):
+        dx = torch.tensor(dx, dtype=torch.float64, device=self.device)
+        sigma = torch.tensor(sigma, dtype=torch.float64, device=self.device)
+        cov_g = torch.tensor(self.cov_g, dtype=torch.float64, device=self.device)
+        cov_inv = torch.tensor(cov_inv, dtype=torch.float64, device=self.device)
+        p = torch.tensor(p, dtype=torch.float64, device=self.device)
+
+        dx = dx.unsqueeze(-1) # (Nsample, Ndim, 1)
+        dxT = torch.transpose(dx, 1, 2) # (Nsample, 1, Ndim)
+        sigma = sigma.unsqueeze(0).unsqueeze(-1) # (1, Ndim, 1)
+        sigmaT = torch.transpose(sigma, 1, 2) # (1, 1, Ndim)
+        cov_g = cov_g.unsqueeze(0) # (1, Ndim, Ndim)
+        cov_inv = cov_inv.unsqueeze(0) # (1, Ndim, Ndim)
+        p = p.unsqueeze(-1).unsqueeze(-1) # (Nsample, 1, 1)
+
         if self.covariance_type == 'constant':
-            grad = ((dx.reshape(1,-1) @ dx.reshape(-1,1))/sigma**3 - self.Ndim/sigma)*p
+            grad = ((dxT @ dx)/sigma**3 - self.Ndim/sigma)*p
         
         elif self.covariance_type == 'diagonal':
-            grad = np.diag(cov_inv @ dx.reshape(-1,1) @ dx.reshape(1,-1) @ np.sqrt(cov_inv) - np.sqrt(cov_inv))*p
+            grad = torch.diag(cov_inv @ dx @ dxT @ torch.sqrt(cov_inv) - torch.sqrt(cov_inv))*p
             
         elif self.covariance_type == 'gaussian_constant':
-            grad = (1/sigma)*(dx.reshape(1,-1) @ cov_inv @ dx.reshape(-1,1) - self.Ndim)*p
+            grad = (1/sigma)*(dxT @ cov_inv @ dx - self.Ndim)*p
         
         elif self.covariance_type == 'gaussian_diagonal':
-            z = cov_inv @ dx
-            Bz = (self.cov_g*sigma[np.newaxis,:]) @ z
-            A_diag = z*Bz
+            z = cov_inv @ dx # (Nsample, Ndim, 1)
+            B = cov_g*sigma # (1, Ndim, Ndim)
+            Bz = B @ z # (Nsample, Ndim, 1)
+            A_diag = z*Bz # (Nsample, Ndim, 1)
         
             grad = (A_diag - 1/sigma)*p
         
-        return grad
+        elif self.covariance_type == 'gaussian_adaptive':
+            grad = p.clone()
+
+        return grad.detach().cpu().numpy()[:,:,0]
     
-    def ensemble_jacobian(self, x0, dx, sigma_ensemble, test_function):
-        x0 = x0[:self.Ndim]
-        cov, cov_inv = self.construct_cov_matrix(sigma_ensemble)
-        
+    def ensemble_jacobian(self, x_bounded, test_function):
+        # Filter and Project mu & sigma
+        mu = x_bounded[:self.Ndim]
+        mu_fp = dtf.filter_and_project(
+            mu,
+            self.symmetry,
+            self.periodic,
+            self.Nx,
+            self.Ny,
+            self.min_feature_size,
+            self.sigma_filter,
+            self.beta_proj,
+            padding=self.padding,
+        )
+
+        sigma = x_bounded[self.Ndim:]
+        if self.Nsigma == 1:
+            sigma_fp = sigma.copy()
+        else:
+            sigma_scaled = 2*(sigma - lb[self.Ndim:])/(ub[self.Ndim:] - lb[self.Ndim:]) - 1
+            sigma_fp_scaled = dtf.filter_and_project(
+                sigma_scaled,
+                self.symmetry,
+                self.periodic,
+                self.Nx,
+                self.Ny,
+                self.min_feature_size,
+                self.sigma_filter,
+                self.beta_proj_sigma,
+                padding=self.padding,
+            )
+            sigma_fp = (sigma_fp_scaled + 1)*(ub[self.Ndim:] - lb[self.Ndim:])/2 + lb[self.Ndim:]
+
+        cov, cov_inv = self.construct_cov_matrix(mu_fp, sigma_fp)
+
+        t1 = time.time()
+        if self.covariance_type == 'gaussian_diagonal':
+            # Fast sampling for constant sigma
+            # cov = sigma^2 * L * L.T = (sigma * L) * (sigma * L).T
+            u = np.random.standard_normal((self.r_CV * self.Nensemble, self.Ndim))
+            dx = u @ (sigma_fp * self.L_g).T
+        elif self.covariance_type == 'gaussian_constant':
+            # Fast sampling using precomputed Cholesky
+            # cov = D @ L @ L.T @ D = (D @ L) @ (D @ L).T
+            # L_eff = D @ L = sigma_fp[:, None] * self.L_g
+            # dx = z @ L_eff.T
+            u = np.random.standard_normal((self.r_CV * self.Nensemble, self.Ndim))
+            dx = u @ (sigma_fp[:, np.newaxis] * self.L_g).T
+        elif self.covariance_type == 'gaussian_adaptive':
+            sigma_diag = np.exp(-mu_fp**2 / (2 * sigma_fp**2))
+            u = np.random.standard_normal((self.r_CV * self.Nensemble, self.Ndim))
+            dx = u @ (sigma_diag[:, np.newaxis] * self.L_g).T
+        else:
+            cov, cov_inv = self.construct_cov_matrix(mu_fp, sigma_fp)
+            dx = np.random.multivariate_normal(np.zeros(self.Ndim), cov, size=self.r_CV*self.Nensemble)
+        t2 = time.time()
+        if comm.rank == 0 and self.verbosity >= 2:
+            print('--> Random Sample Generation: ', t2-t1, flush=True)
+
         # Get Brush Binarized Densities ------------------------------------------------------------
         t1 = time.time()
-        x_sample = dtf.binarize(x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.brush_shape, self.beta_proj, self.sigma_filter, dx=dx,
-                                upsample_ratio=self.upsample_ratio, padding=self.padding, method=self.feasible_design_generation_method, Nthreads=self.Nthreads)
+        x_sample = dtf.binarize(
+            mu_fp,
+            self.symmetry,
+            self.periodic,
+            self.Nx,
+            self.Ny,
+            self.min_feature_size,
+            self.brush_shape,
+            self.beta_proj,
+            self.sigma_filter,
+            dx=dx,
+            upsample_ratio=self.upsample_ratio,
+            padding=self.padding,
+            method=self.feasible_design_generation_method,
+            Nthreads=self.Nthreads,
+            cuda_ind=self.cuda_ind,
+        )
         t2 = time.time()
         if comm.rank == 0 and self.verbosity >= 2:
             print('--> Feasible Design Generation: ', t2-t1, flush=True)
@@ -272,20 +412,21 @@ class optimizer:
             f_temp = self.cost_obj.get_cost(x_sample[n,:], False)
             f_shifted = (f_temp - self.cost_threshold)/(self.cost_threshold + 1)
             f[n] = -np.exp(-self.coeff_exp*f_shifted)
-            f_logDeriv[n,:self.Ndim] = self.mu_derivative(dx[n,:], cov_inv, f[n])
-            f_logDeriv[n,self.Ndim:] = self.sigma_derivative(dx[n,:], sigma_ensemble, cov_inv, f[n])
+            #f[n] = f_temp
+        #f = -np.exp(-self.coeff_exp * (f - np.mean(f)) / np.std(f))
+        f_logDeriv[:,:self.Ndim] = self.mu_derivative(mu_fp, sigma_fp, dx[:self.Nensemble,:], cov_inv, f)
+        f_logDeriv[:,self.Ndim:] = self.sigma_derivative(dx[:self.Nensemble,:], sigma_fp, cov_inv, f)
         t2 = time.time()
         if comm.rank == 0 and self.verbosity >= 2:
             print('--> Cost Computation: ', t2-t1, flush=True)
 
         if test_function:
-            x_fp0, x_b0 = dtf.binarize(x0.reshape(1,-1), self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.brush_shape, self.beta_proj, self.sigma_filter,
-                                       upsample_ratio=self.upsample_ratio, output_details=True, padding=self.padding, method=self.feasible_design_generation_method, Nthreads=self.Nthreads)
+            x_b0 = dtf.binarize(mu_fp.reshape(1,-1), self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.brush_shape, self.beta_proj, self.sigma_filter,
+                                       upsample_ratio=self.upsample_ratio, padding=self.padding, method=self.feasible_design_generation_method, Nthreads=self.Nthreads)
             f0, jac_b_STE_sym = self.cost_obj.get_cost(x_b0, True)
             jac_b_STE_sym = jac_b_STE_sym.reshape(self.Nx, self.Ny)
         else:
-            x_fp0 = np.zeros_like(x0)
-            x_b0 = np.zeros_like(x0)
+            x_b0 = np.zeros_like(mu_fp)
             f0 = 0
         
         # Get Best Cost -----------------------------------------------------------------------------------
@@ -301,8 +442,10 @@ class optimizer:
             f_temp = self.cost_obj.get_cost(x_sample[n,:], False)
             f_shifted = (f_temp - self.cost_threshold)/(self.cost_threshold + 1)
             f_ctrl_all[n] = -np.exp(-self.coeff_exp*f_shifted)
-            f_ctrl_logDeriv_all[n,:self.Ndim] = self.mu_derivative(dx[n,:], cov_inv, f_ctrl_all[n])
-            f_ctrl_logDeriv_all[n,self.Ndim:] = self.sigma_derivative(dx[n,:], sigma_ensemble, cov_inv, f_ctrl_all[n])
+            #f_ctrl_all[n] = f_temp
+        #f_ctrl_all = -np.exp(-self.coeff_exp * (f_ctrl_all - np.mean(f_ctrl_all)) / np.std(f_ctrl_all))
+        f_ctrl_logDeriv_all[:,:self.Ndim] = self.mu_derivative(mu_fp, sigma_fp, dx, cov_inv, f_ctrl_all)
+        f_ctrl_logDeriv_all[:,self.Ndim:] = self.sigma_derivative(dx, sigma_fp, cov_inv, f_ctrl_all)
         
         # Expectation of the Control Variate Function -----------------------------------------------------
         ctrlVarExp_f = np.mean(f_ctrl_all)
@@ -367,12 +510,12 @@ class optimizer:
             jac_sigma_fp_ensemble_sym = symOp.symmetrize_jacobian(jac_fp_ensemble[self.Ndim:], self.symmetry, self.Nx, self.Ny)
         
         if test_function:
-            jac_latent_STE = dtf.backprop_filter_and_project(jac_b_STE_sym, x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta_proj, padding=self.padding)
+            jac_latent_STE = dtf.backprop_filter_and_project(jac_b_STE_sym, mu, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta_proj, padding=self.padding)
         
         jac_latent_ensemble = jac_fp_ensemble.copy()
-        jac_latent_ensemble[:self.Ndim] = dtf.backprop_filter_and_project(jac_mu_fp_ensemble_sym, x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta_proj, padding=self.padding)
+        jac_latent_ensemble[:self.Ndim] = dtf.backprop_filter_and_project(jac_mu_fp_ensemble_sym, mu, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta_proj, padding=self.padding)
         if self.Nsigma > 1:
-            jac_latent_ensemble[self.Ndim:] = dtf.backprop_filter_and_project(jac_sigma_fp_ensemble_sym, x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta_proj_sigma, padding=self.padding)
+            jac_latent_ensemble[self.Ndim:] = dtf.backprop_filter_and_project(jac_sigma_fp_ensemble_sym, sigma, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta_proj_sigma, padding=self.padding)
         
         if test_function:
             cost_all = (f0, np.mean(f_est))
@@ -382,7 +525,7 @@ class optimizer:
         
             return cost_all, density_all, grad_STE, grad_ensemble
         else:
-            return f0, x_b0, np.mean(f), np.std(f), np.mean(f_ctrl_all), np.std(f_ctrl_all), jac_latent_ensemble, ctrlVarCoeff_mu, ctrlVarCoeff_sigma, corr_f, corr_mu, corr_sigma, f_best, x_best
+            return mu_fp, sigma_fp, np.mean(f), np.std(f), np.mean(f_ctrl_all), np.std(f_ctrl_all), jac_latent_ensemble, ctrlVarCoeff_mu, ctrlVarCoeff_sigma, corr_f, corr_mu, corr_sigma, f_best, x_best
     
     def ADAM(self,
              x_bounded,
@@ -443,46 +586,19 @@ class optimizer:
             
             x_bounded = x.copy()
             x_bounded[mask_bound] = lb[mask_bound] + (ub[mask_bound] - lb[mask_bound])/(1 + np.exp(-x[mask_bound]))
-            
-            sigma_ensemble = x_bounded[self.Ndim:]
-            if self.Nsigma == 1:
-                sigma_fp = sigma_ensemble.copy()
-            else:
-                sigma_scaled = 2*(sigma_ensemble - lb[self.Ndim:])/(ub[self.Ndim:] - lb[self.Ndim:]) - 1
-                sigma_fp_scaled = dtf.filter_and_project(sigma_scaled, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta_proj_sigma, padding=self.padding)
-                sigma_fp = (sigma_fp_scaled + 1)*(ub[self.Ndim:] - lb[self.Ndim:])/2 + lb[self.Ndim:]
-
-            cov, cov_inv = self.construct_cov_matrix(sigma_fp)
-            
-            t1 = time.time()
-            if self.covariance_type == 'gaussian_diagonal':
-                # Fast sampling using precomputed Cholesky
-                # cov = D @ L @ L.T @ D = (D @ L) @ (D @ L).T
-                # L_eff = D @ L = sigma_fp[:, None] * self.L_g
-                # dx = z @ L_eff.T
-                u = np.random.standard_normal((self.r_CV * self.Nensemble, self.Ndim))
-                dx = u @ (sigma_fp[:, np.newaxis] * self.L_g).T
-            elif self.covariance_type == 'gaussian_constant':
-                # Fast sampling for constant sigma
-                # cov = sigma^2 * L * L.T = (sigma * L) * (sigma * L).T
-                u = np.random.standard_normal((self.r_CV * self.Nensemble, self.Ndim))
-                dx = u @ (sigma_fp * self.L_g).T
-            else: 
-                dx = np.random.multivariate_normal(np.zeros(self.Ndim), cov, size=self.r_CV*self.Nensemble)
-            t2 = time.time()
-            if comm.rank == 0 and self.verbosity >= 2:
-                print('--> Random Sample Generation: ', t2-t1, flush=True)
 
             t1 = time.time()
-            loss, x_bin0, loss_mean, loss_std, loss_ctrl_mean, loss_ctrl_std, jac, ctrlVarCoeff_mu, ctrlVarCoeff_sigma, corr_f, corr_mu, corr_sigma, f_best, x_best = self.ensemble_jacobian(x_bounded,
-                                                                                                                                                                                             dx,
-                                                                                                                                                                                             sigma_fp,
-                                                                                                                                                                                             False)
+            mu = x_bounded[:self.Ndim]
+            sigma = x_bounded[self.Ndim:]
+            mu_fp, sigma_fp, loss_mean, loss_std, loss_ctrl_mean, loss_ctrl_std, jac, ctrlVarCoeff_mu, ctrlVarCoeff_sigma, corr_f, corr_mu, corr_sigma, f_best, x_best = self.ensemble_jacobian(
+                x_bounded,
+                False,
+            )
             t2 = time.time()
             if comm.rank == 0 and self.verbosity >= 2:
                 print('--> Ensemble Jacobian Computation: ', t2-t1, flush=True)
-            
-            if self.Nsigma > 1:
+
+            if self.covariance_type != 'gaussian_probe' and self.Nsigma > 1:
                 jac[self.Ndim:] *= 2/(ub[self.Ndim:] - lb[self.Ndim:]) # accounts for covariance rescaling
             
             jac_save = jac.copy()
@@ -500,10 +616,10 @@ class optimizer:
             else:
                 self.x_latent_hist = np.vstack((self.x_latent_hist, x_bounded[:self.Ndim]))
                 
-            if self.x_hist is None:
-                self.x_hist = x_bin0.copy()
+            if self.mu_fp_hist is None:
+                self.mu_fp_hist = mu_fp.copy()
             else:
-                self.x_hist = np.vstack((self.x_hist, x_bin0))
+                self.mu_fp_hist = np.vstack((self.mu_fp_hist, mu_fp))
             
             if self.best_cost_hist.size == 0:
                 new_best = True
@@ -528,13 +644,23 @@ class optimizer:
             self.cost_ensemble_ctrl_hist = np.append(self.cost_ensemble_ctrl_hist, loss_ctrl_mean)
             self.cost_ensemble_ctrl_sigma_hist = np.append(self.cost_ensemble_ctrl_sigma_hist, loss_ctrl_std)
             
-            if self.Nsigma == 1:
-                self.sigma_ensemble_hist = np.append(self.sigma_ensemble_hist, sigma_ensemble)
-            else:
-                if self.sigma_ensemble_hist is None:
-                    self.sigma_ensemble_hist = sigma_ensemble.copy()
+            if self.covariance_type == 'gaussian_adaptive':
+                self.sigma_hist = np.append(self.sigma_hist, sigma)
+
+                if self.sigma_fp_hist is None:
+                    self.sigma_fp_hist = np.exp(-mu**2 / (2 * sigma_fp**2))
                 else:
-                    self.sigma_ensemble_hist = np.vstack((self.sigma_ensemble_hist, sigma_ensemble))
+                    self.sigma_fp_hist = np.vstack((self.sigma_fp_hist, np.exp(-mu**2 / (2 * sigma_fp**2))))
+
+            elif self.Nsigma == 1:
+                self.sigma_hist = np.append(self.sigma_hist, sigma)
+                self.sigma_fp_hist = np.append(self.sigma_fp_hist, sigma_fp)
+
+            else:
+                if self.sigma_hist is None:
+                    self.sigma_hist = sigma.copy()
+                else:
+                    self.sigma_hist = np.vstack((self.sigma_hist, sigma))
                 
                 if self.sigma_fp_hist is None:
                     self.sigma_fp_hist = sigma_fp.copy()
@@ -556,40 +682,42 @@ class optimizer:
         
             t2 = time.time()
             t_rem = (t2 - t1)*(self.maxiter - self.n_iter + 1)/3600
+
+            degree_of_binarization = np.max((np.mean(mu_fp[mu_fp >= 0]), np.mean(-mu_fp[mu_fp <= 0])))
             
             if comm.rank == 0:
                 if self.Nsigma == 1:
-                    print('    | %4d |  %4d |   %4d  | %7.5f |  %4d | %7.5f |  %5.2f  | %7.4f | %7.4f |  %9.2f |  %9.2f  |  %8.3f |' %(self.n_iter,
-                                                                                                                                       self.Nensemble,
-                                                                                                                                       self.r_CV*self.Nensemble,
-                                                                                                                                       var_reduction,
-                                                                                                                                       int(1/var_reduction),
-                                                                                                                                       sigma_fp[0],
-                                                                                                                                       ctrlVarCoeff_mu,
-                                                                                                                                       np.mean(corr_f),
-                                                                                                                                       np.mean(corr_mu),
-                                                                                                                                       -np.log(-loss_mean)/self.coeff_exp,
-                                                                                                                                       -np.log(-loss_ctrl_mean)/self.coeff_exp,
-                                                                                                                                       self.best_cost_hist[-1]),
-                                                                                                                                       end='', flush=True)
+                    print('    | %4d |  %4d |   %4d  | %7.5f | %7.5f |  %5.2f  | %7.4f | %7.4f |  %9.2f |  %9.2f  |  %8.3f | %7.2f |' %(
+                        self.n_iter,
+                        self.Nensemble,
+                        self.r_CV*self.Nensemble,
+                        var_reduction,
+                        sigma_fp[0] if self.covariance_type == 'gaussian_constant' else np.min(np.exp(-mu**2 / (2 * sigma_fp**2))),
+                        ctrlVarCoeff_mu,
+                        np.mean(corr_f),
+                        np.mean(corr_mu),
+                        -np.log10(-loss_mean),
+                        -np.log10(-loss_ctrl_mean),
+                        self.best_cost_hist[-1],
+                        degree_of_binarization,
+                        ),
+                        end='', flush=True)
                 
                 else:
-                    print('    | %4d |  %4d |   %4d  | %7.5f |  %4d | %7.5f | %7.5f |  %5.2f  | %7.4f | %7.4f |  %9.2f | %7.2f |  %9.2f  |   %7.2f  |  %8.3f |' %(self.n_iter,
-                                                                                                                                                                  self.Nensemble,
-                                                                                                                                                                  self.r_CV*self.Nensemble,
-                                                                                                                                                                  var_reduction,
-                                                                                                                                                                  int(1/var_reduction),
-                                                                                                                                                                  np.min(sigma_fp),
-                                                                                                                                                                  np.max(sigma_fp),
-                                                                                                                                                                  ctrlVarCoeff_mu,
-                                                                                                                                                                  np.mean(corr_f),
-                                                                                                                                                                  np.mean(corr_mu),
-                                                                                                                                                                  loss_mean,
-                                                                                                                                                                  loss_std,
-                                                                                                                                                                  loss_ctrl_mean,
-                                                                                                                                                                  loss_ctrl_std,
-                                                                                                                                                                  self.best_cost_hist[-1]),
-                                                                                                                                                                  end='', flush=True)
+                    print('    | %4d |  %4d |   %4d  | %7.5f | %10.2f | %13.2f | %7.4f | %8.4f | %11.4f |  %9.2f |  %9.2f  |  %8.3f |' %(
+                        self.n_iter,
+                        self.Nensemble,
+                        self.r_CV*self.Nensemble,
+                        var_reduction,
+                        ctrlVarCoeff_mu,
+                        ctrlVarCoeff_sigma,
+                        np.mean(corr_f),
+                        np.mean(corr_mu),
+                        np.mean(corr_sigma),
+                        -np.log(-loss_mean)/self.coeff_exp,
+                        -np.log(-loss_ctrl_mean)/self.coeff_exp,
+                        self.best_cost_hist[-1]),
+                        end='', flush=True)
             
             t1 = time.time()
             self.save_data(x_bounded=x_bounded,
@@ -637,19 +765,17 @@ class optimizer:
 
     def run(self, n_seed, output_filename, x0=None, eta_mu=0.01, eta_sigma=1.0, load_data=False):
         if comm.rank == 0 and self.verbosity >= 1:
-            print('### Ensemble Optimization (seed = ' + str(n_seed) + ')\n', flush=True)
+            print('### GEGD (seed = ' + str(n_seed) + ')\n', flush=True)
     
         np.random.seed(n_seed)
         self.output_filename = output_filename
-        
-        sigma_ensemble = self.sigma_ensemble_max/2
 
         lb = np.zeros(self.Ndim+self.Nsigma)
         lb[:self.Ndim] = -np.inf
-        lb[self.Ndim:] = 0.99*self.sigma_ensemble_max/2
+        lb[self.Ndim:] = 0.99*self.sigma_ensemble
         ub = np.zeros(self.Ndim+self.Nsigma)
         ub[:self.Ndim] = np.inf
-        ub[self.Ndim:] = 1.01*self.sigma_ensemble_max/2
+        ub[self.Ndim:] = 1.01*self.sigma_ensemble
         
         if load_data:
             data_file1 = output_filename + "_GEGD_results.npz"
@@ -673,16 +799,16 @@ class optimizer:
                 self.x_bounded_norm_hist = data['x_bounded_norm_hist'][:self.n_iter]
                 self.eta_sched_hist = data['eta_sched_hist'][:self.n_iter]
                 if self.Nsigma == 1:
-                    self.sigma_ensemble_hist = data['sigma_ensemble_hist'][:self.n_iter]
+                    self.sigma_hist = data['sigma_hist'][:self.n_iter]
                 adam_iter = data['adam_iter'] - 1
                 x_bounded_norm_ref = data['x_bounded_norm_ref']
                 
             with np.load(data_file2) as data:
                 self.x_latent_hist = data['x_latent_hist'][:self.n_iter,:]
-                self.x_hist = data['x_hist'][:self.n_iter,:]
+                self.mu_fp_hist = data['mu_fp_hist'][:self.n_iter,:]
                 self.best_x_hist = data['best_x_hist'][:self.n_iter,:]
                 if self.Nsigma > 1:
-                    self.sigma_ensemble_hist = data['sigma_ensemble_hist'][:self.n_iter,:]
+                    self.sigma_hist = data['sigma_hist'][:self.n_iter,:]
                     self.sigma_fp_hist = data['sigma_fp_hist'][:self.n_iter,:]
                 self.corr_mu_hist = data['corr_mu_hist'][:self.n_iter,:]
                 self.corr_sigma_hist = data['corr_sigma_hist'][:self.n_iter,:]
@@ -698,7 +824,7 @@ class optimizer:
             self.var_reduction_hist = np.zeros(0)
             self.N_eff_hist = np.zeros(0)
             self.x_latent_hist = None
-            self.x_hist = None
+            self.mu_fp_hist = None
             self.best_x_hist = None
             self.cost_ensemble_hist = np.zeros(0)
             self.cost_ensemble_ctrl_hist = np.zeros(0)
@@ -706,9 +832,13 @@ class optimizer:
             self.cost_ensemble_sigma_hist = np.zeros(0)
             self.cost_ensemble_ctrl_sigma_hist = np.zeros(0)
             if self.Nsigma == 1:
-                self.sigma_ensemble_hist = np.zeros(0)
+                self.sigma_hist = np.zeros(0)
+                if self.covariance_type == 'gaussian_constant':
+                    self.sigma_fp_hist = np.zeros(0)
+                elif self.covariance_type == 'gaussian_adaptive':
+                    self.sigma_fp_hist = None
             else:
-                self.sigma_ensemble_hist = None
+                self.sigma_hist = None
                 self.sigma_fp_hist = None
             self.ctrlVarCoeff_mu_hist = np.zeros(0)
             self.ctrlVarCoeff_sigma_hist = np.zeros(0)
@@ -720,7 +850,7 @@ class optimizer:
             
             if x0 is None:
                 # Initial Structure
-                x0 = np.hstack((np.zeros(self.Ndim), sigma_ensemble*np.ones(self.Nsigma)))
+                x0 = np.hstack((np.zeros(self.Ndim), self.sigma_ensemble*np.ones(self.Nsigma)))
             
             jac_mean = None
             jac_var = None
@@ -729,10 +859,10 @@ class optimizer:
         
         if comm.rank == 0 and self.verbosity >= 1:
             if self.Nsigma == 1:
-                print('    | Iter | N_acc | N_inacc | var_red | N_eff |  sigma  | CVCoeff | corr(f) | corr(g) |  Cost Ens  | Cost Ens CV | Cost Best |  x norm  | ADAM_LR | t_rem(hr) |',
+                print('    | Iter | N_acc | N_inacc | var_red |  sigma  | CVCoeff | corr(f) | corr(g) |  Cost Ens  | Cost Ens CV | Cost Best | Deg Bin |  x norm  | ADAM_LR | t_rem(hr) |',
                       flush=True)
             else:
-                print('    | Iter | N_acc | N_inacc | var_red | N_eff | sig_min | sig_max | CVCoeff | corr(f) | corr(g) |  Cost Ens  | StD Ens | Cost Ens CV | StD Ens CV | Cost Best |  x norm  | ADAM_LR | t_rem(hr) |',
+                print('    | Iter | N_acc | N_inacc | var_red | CVCoeff_mu | CVCoeff_sigma | corr(f) | corr(mu) | corr(sigma) |  Cost Ens  | Cost Ens CV | Cost Best |  x norm  | ADAM_LR | t_rem(hr) |',
                       flush=True)
 
         eta_ADAM = np.ones(self.Ndim+self.Nsigma)
@@ -756,9 +886,18 @@ class optimizer:
                     x_bounded = data['x_bounded']
                     jac_mean = data['jac_mean']
                     jac_var = data['jac_var']
-        
+
             # Customize below
             if self.Nsigma == 1:
+                if self.mu_fp_hist.ndim == 1:
+                    mu_fp_hist_final = self.mu_fp_hist.copy()
+                    x_latent_final = self.x_latent_hist.copy()
+                    best_x_final = self.best_x_hist.copy()
+                else:
+                    mu_fp_hist_final = self.mu_fp_hist[-1,:]
+                    x_latent_final = self.x_latent_hist[-1,:]
+                    best_x_final = self.best_x_hist[-1,:]
+
                 np.savez(self.output_filename + "_GEGD_results",
                          N_high_fidelity_hist=self.N_high_fidelity_hist,
                          N_low_fidelity_hist=self.N_low_fidelity_hist,
@@ -774,14 +913,18 @@ class optimizer:
                          corr_f_hist=self.corr_f_hist,
                          x_bounded_norm_hist=self.x_bounded_norm_hist,
                          eta_sched_hist=self.eta_sched_hist,
-                         sigma_ensemble_hist=self.sigma_ensemble_hist,
+                         sigma_hist=self.sigma_hist,
                          n_iter=self.n_iter,
+                         mu_fp_hist_final=mu_fp_hist_final,
+                         x_latent_final=x_latent_final,
+                         best_x_final=best_x_final,
                          adam_iter=adam_iter,
                          x_bounded_norm_ref=x_bounded_norm_ref,
                          )
                          
                 np.savez(self.output_filename + "_GEGD_density_hist",
-                         x_hist=self.x_hist,
+                         mu_fp_hist=self.mu_fp_hist,
+                         sigma_fp_hist=self.sigma_fp_hist,
                          x_latent_hist=self.x_latent_hist,
                          best_x_hist=self.best_x_hist,
                          corr_mu_hist=self.corr_mu_hist,
@@ -813,8 +956,8 @@ class optimizer:
                          )
                          
                 np.savez(self.output_filename + "_GEGD_density_hist",
-                         x_hist=self.x_hist,
-                         sigma_ensemble_hist=self.sigma_ensemble_hist,
+                         mu_fp_hist=self.mu_fp_hist,
+                         sigma_hist=self.sigma_hist,
                          sigma_fp_hist=self.sigma_fp_hist,
                          x_latent_hist=self.x_latent_hist,
                          best_x_hist=self.best_x_hist,
@@ -854,17 +997,15 @@ class optimizer:
         
         lb = np.zeros(self.Ndim+self.Nsigma)
         lb[:self.Ndim] = -1
-        lb[self.Ndim:] = 0.99*self.sigma_ensemble_max/2
+        lb[self.Ndim:] = 0.99*self.sigma_ensemble
         ub = np.zeros(self.Ndim+self.Nsigma)
         ub[:self.Ndim] = 1
-        ub[self.Ndim:] = 1.01*self.sigma_ensemble_max/2
-        
-        sigma_ensemble = self.sigma_ensemble_max/2
+        ub[self.Ndim:] = 1.01*self.sigma_ensemble
         
         if self.Nsigma == 1:
-            sigma_fp = sigma_ensemble.copy()
+            sigma_fp = self.sigma_ensemble.copy()
         else:
-            sigma_scaled = 2*(sigma_ensemble - lb[self.Ndim:])/(ub[self.Ndim:] - lb[self.Ndim:]) - 1
+            sigma_scaled = 2*(self.sigma_ensemble - lb[self.Ndim:])/(ub[self.Ndim:] - lb[self.Ndim:]) - 1
             sigma_fp_scaled = dtf.filter_and_project(sigma_scaled, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta_proj_sigma, padding=self.padding)
             sigma_fp = (sigma_fp_scaled + 1)*(ub[self.Ndim:] - lb[self.Ndim:])/2 + lb[self.Ndim:]
         cov, cov_inv = self.construct_cov_matrix(sigma_fp)

@@ -19,11 +19,12 @@ class optimizer:
 		padding,
 		maxiter,
 		high_fidelity_setting,
-		brush_size,
+		min_feature_size,
 		upsample_ratio=1,
 		beta_proj=8,
 		cost_obj=None,
 		Nthreads=1,
+        cuda_ind=0,
 	):
         
         self.Nx = Nx
@@ -35,12 +36,13 @@ class optimizer:
         self.maxiter = maxiter
         self.beta_proj = beta_proj
         self.beta_proj_sigma = beta_proj
-        self.brush_size = brush_size
+        self.min_feature_size = min_feature_size
         self.upsample_ratio = upsample_ratio
-        self.sigma_filter = brush_size/2/np.sqrt(2)
+        self.sigma_filter = min_feature_size/2/np.sqrt(2)
         self.high_fidelity_setting = high_fidelity_setting
         self.cost_obj = cost_obj
         self.Nthreads = Nthreads
+        self.cuda_ind = cuda_ind
         
         # Get Number of Independent Parameters
         if symmetry == 0:
@@ -54,6 +56,8 @@ class optimizer:
         
         elif symmetry == 4:
             self.Ndim = int(np.floor(Nx/2 + 0.5)*(np.floor(Nx/2 + 0.5) + 1)/2)
+
+        self.device = torch.device(f'cuda:{cuda_ind}') if torch.cuda.is_available() else torch.device('cpu')
 	
     def bilevel_cost(self, x_reward):
         # Get Bilevel Binarized Densities ------------------------------------------------------------
@@ -63,15 +67,19 @@ class optimizer:
 			self.symmetry,
 			self.periodic,
 			self.padding,
-			self.brush_size + 2,
+			self.min_feature_size,
+            maxiter=60,
+            cuda_ind=self.cuda_ind,
 		)
+
+        self.cost_obj.set_accuracy(self.high_fidelity_setting)
 
         x_bin = np.zeros((self.Ntrial, self.Nx*self.Ny))
         f = np.zeros(self.Ntrial)
         jac = np.zeros((self.Ntrial, self.Ndim))
 
         for n in range(self.Ntrial):
-            x_reward_temp = torch.tensor(x_reward[n,:], device='cuda' if torch.cuda.is_available() else 'cpu', dtype=torch.float64)
+            x_reward_temp = torch.tensor(x_reward[n,:], device=self.device, dtype=torch.float64)
             jac_near_binary, x_near_binary = jacrev(generator.generate_near_binary, has_aux=True)(x_reward_temp)
             x_bin[n,:] = np.where(x_near_binary.detach().cpu().numpy() < 0.5, 0, 1).reshape(-1)
 
@@ -134,7 +142,6 @@ class optimizer:
                     np.min(loss),
                     t_rem,
                     ),
-                    end='',
 					flush=True,
 				)
 
@@ -173,7 +180,7 @@ class optimizer:
                 
             with np.load(data_file1) as data:
                 self.n_iter = data['n_iter']
-                self.best_cost_hist = data['best_cost_hist'][:self.n_iter]
+                self.cost_hist = data['cost_hist'][:self.n_iter]
 
                 adam_iter = data['adam_iter'] - 1
                 
@@ -181,7 +188,7 @@ class optimizer:
                 self.best_x_latent_hist = data['best_x_latent_hist'][:self.n_iter,:]
                 self.best_x_hist = data['best_x_hist'][:self.n_iter,:]
                 
-                x0 = data['x_bounded']
+                x0 = data['x']
                 jac_mean = data['jac_mean']
                 jac_var = data['jac_var']
             
@@ -190,7 +197,7 @@ class optimizer:
             
             self.best_x_latent_hist = None
             self.best_x_hist = None
-            self.best_cost_hist = np.zeros(0)
+            self.cost_hist = None
             
             if x0 is None:
                 # Initial Structure
@@ -216,20 +223,29 @@ class optimizer:
         
         self.save_data()
     
-    def save_data(self, x_bounded=None, jac_mean=None, jac_var=None, adam_iter=None):
+    def save_data(self, x=None, jac_mean=None, jac_var=None, adam_iter=None):
         if comm.rank == 0:
-            if x_bounded is None:
+            if x is None:
                 with np.load(self.output_filename + "_AF_BL_results.npz") as data:
                     adam_iter = data['adam_iter']
                 
                 with np.load(self.output_filename + "_AF_BL_density_hist.npz") as data:
-                    x_bounded = data['x_bounded']
+                    x = data['x']
                     jac_mean = data['jac_mean']
                     jac_var = data['jac_var']
         
+            if self.best_x_latent_hist.ndim == 1:
+                best_x_latent_final = self.best_x_latent_hist.copy()
+                best_x_final = self.best_x_hist.copy()
+            else:
+                best_x_latent_final = self.best_x_latent_hist[-1,:]
+                best_x_final = self.best_x_hist[-1,:]
+
             # Customize below
             np.savez(self.output_filename + "_AF_BL_results",
-                best_cost_hist=self.best_cost_hist,
+                cost_hist=self.cost_hist,
+                best_x_latent_final=best_x_latent_final,
+                best_x_final=best_x_final,
                 n_iter=self.n_iter,
                 adam_iter=adam_iter,
             )
@@ -237,7 +253,7 @@ class optimizer:
             np.savez(self.output_filename + "_AF_BL_density_hist",
                 best_x_latent_hist=self.best_x_latent_hist,
                 best_x_hist=self.best_x_hist,
-                x_bounded=x_bounded,
+                x=x,
                 jac_mean=jac_mean,
                 jac_var=jac_var,
 			)

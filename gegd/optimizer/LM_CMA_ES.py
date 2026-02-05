@@ -90,44 +90,112 @@ class optimizer:
         
         return f_batch, x_bin
 
+    def Az(
+        self,
+        c_1,
+        m,
+        j,
+        arz,
+        P,
+        V,
+    ):
+        a = torch.sqrt(1 - c_1)
+        V_norm = torch.linalg.norm(V, dim=1)
+        b = (a / V_norm**2) * (torch.sqrt(1 + (c_1 / (1 - c_1)) * V_norm**2) - 1)
+
+        x = arz.clone()
+        for t in range(np.min((m.item(), j.size(dim=0)))):
+            k = b[j[t]] * V[j[t],:] @ x
+            x = a * x + k * P[j[t],:]
+        return x
+    
+    def Ainvz(
+        self,
+        c_1,
+        m,
+        j,
+        p_c,
+        V,
+    ):
+        c = 1 / torch.sqrt(1 - c_1)
+        V_norm = torch.linalg.norm(V, dim=1)
+        d = (1 / (torch.sqrt(1 - c_1) * V_norm**2)) * (1 - 1 / torch.sqrt(1 + (c_1 / (1 - c_1)) * V_norm**2))
+    
+        x = p_c.clone()
+        for t in range(np.min((m.item(), j.size(dim=0)))):
+            k = d[j[t]] * V[j[t],:] @ x
+            x = c * x - k * V[j[t],:]
+        
+        return x
+    
+    def UpdateSet(
+        self,
+        N_steps,
+        m,
+        j,
+        l,
+    ):
+        if self.n_iter < m:
+            if j.size(dim=0) < self.n_iter + 1:
+                j = torch.cat((j, torch.tensor(self.n_iter, dtype=torch.int64, device=self.device).unsqueeze(0)), dim=0)
+            else:
+                j[self.n_iter] = self.n_iter
+        else:
+            i_min = 1 + torch.argmin(l[1:] - l[:-1])
+
+            if l[j[i_min]] - l[j[i_min - 1]] >= N_steps:
+                i_min = 1
+            
+            if i_min != m:
+                j_temp = j[i_min]
+                for i in range(i_min, m):
+                    j[i] = j[i + 1]
+                j[m] = j_temp
+        
+        j_cur = j[int(np.min((self.n_iter, m.item() - 1)))]
+        l[j_cur] = self.n_iter
+
+        return j_cur, j, l
+
     def CMA_ES(
         self,
         xmean=None,
         sigma=None,
-        Cov=None,
+        s=None,
         p_c=None,
-        p_sigma=None,
-        B=None,
-        D=None,
-        eig_eval=None,
-        counteval=None,
+        P=None,
+        V=None,
+        j=None,
+        l=None,
     ):
         # Set Selection Parameters
         #self.Nsample = 25 #int(4 + np.floor(3 * np.log(self.Ndim)))
         mu = torch.tensor(int(np.floor(self.Nsample / 2)), dtype=torch.int64, device=self.device)
-        weights = torch.log(mu + 1 / 2) - torch.log(torch.arange(mu, dtype=torch.float64, device=self.device) + 1)
+        mu_arange = torch.arange(mu, dtype=torch.float64, device=self.device) + 1
+        weights = (torch.log(mu + 1) - torch.log(mu_arange)) / (mu * torch.log(mu + 1) - torch.sum(torch.log(mu_arange)))
         weights /= torch.sum(weights)
         mu_eff = 1 / torch.sum(weights**2)
 
         # Set Adaptation Parameters
-        c_c = (4 + mu_eff / self.Ndim) / (self.Ndim + 4 + 2 * mu_eff / self.Ndim)
-        c_sigma = (mu_eff + 2) / (self.Ndim + mu_eff + 5)
-        c_1 = 2 / ((self.Ndim + 1.3)**2 + mu_eff)
-        c_mu = torch.min(torch.tensor([1 - c_1, 2 * (mu_eff - 2 + 1 / mu_eff) / ((self.Ndim + 2)**2 + 2 * mu_eff / 2)]))
-        d_sigma = 1 + 2 * torch.max(torch.tensor([0, torch.sqrt((mu_eff - 1) / (self.Ndim + 1)) - 1])) + c_sigma
+        c_c = 1 / torch.tensor(self.Nsample, dtype=torch.int64, device=self.device) #1 / (4 + torch.tensor(int(np.floor(3 * np.log(self.Nsample))), dtype=torch.float64, device=self.device))
+        c_sigma = 0.3
+        c_1 = 1 / (10 * torch.log(torch.tensor(self.Nsample, dtype=torch.float64, device=self.device) + 1))
+        d_sigma = 1
+        z_tgt = 0.25
+
+        # Set Limited Memory Parameters
+        m = torch.tensor(self.Nsample, dtype=torch.int64, device=self.device) #4 + torch.tensor(int(np.floor(3 * np.log(self.Nsample))), dtype=torch.int64, device=self.device)
+        N_steps = m
 
         # Initialize Dynamic Internal Parameters
         p_c = torch.tensor(p_c, dtype=torch.float64, device=self.device) if p_c is not None else torch.zeros(self.Ndim, dtype=torch.float64, device=self.device)
-        p_sigma = torch.tensor(p_sigma, dtype=torch.float64, device=self.device) if p_sigma is not None else torch.zeros(self.Ndim, dtype=torch.float64, device=self.device)
-        B = torch.tensor(B, dtype=torch.float64, device=self.device) if B is not None else torch.eye(self.Ndim, dtype=torch.float64, device=self.device)
-        D = torch.tensor(D, dtype=torch.float64, device=self.device) if D is not None else torch.eye(self.Ndim, dtype=torch.float64, device=self.device)
+        P = torch.tensor(P, dtype=torch.float64, device=self.device) if P is not None else torch.zeros(m, self.Ndim, dtype=torch.float64, device=self.device)
+        V = torch.tensor(V, dtype=torch.float64, device=self.device) if V is not None else torch.ones(m, self.Ndim, dtype=torch.float64, device=self.device)
         xmean = torch.tensor(xmean, dtype=torch.float64, device=self.device) if xmean is not None else torch.zeros(self.Ndim, dtype=torch.float64, device=self.device)
         sigma = torch.tensor(sigma, dtype=torch.float64, device=self.device) if sigma is not None else torch.tensor(0.5, dtype=torch.float64, device=self.device)
-        Cov = torch.tensor(Cov, dtype=torch.float64, device=self.device) if Cov is not None else torch.eye(self.Ndim, dtype=torch.float64, device=self.device)
-        eig_eval = eig_eval if eig_eval is not None else 0
-        chi_N = self.Ndim**0.5 * (1 - 1 / (4 * self.Ndim) + 1 / (21 * self.Ndim**2))
-
-        counteval = counteval if counteval is not None else 0
+        s = torch.tensor(s, dtype=torch.float64, device=self.device) if s is not None else torch.tensor(0, dtype=torch.float64, device=self.device)
+        j = torch.tensor(j, dtype=torch.int64, device=self.device) if j is not None else torch.zeros(0, dtype=torch.int64, device=self.device)
+        l = torch.tensor(l, dtype=torch.int64, device=self.device) if l is not None else torch.zeros(m, dtype=torch.int64, device=self.device)
 
         while True:
             t1 = time.time()
@@ -135,7 +203,9 @@ class optimizer:
             # Sample Candidates
             arz = np.random.normal(size=(self.Ndim, self.Nsample))
             arz = torch.tensor(arz, dtype=torch.float64, device=self.device)
-            arx = xmean.unsqueeze(-1) + sigma * (B @ D @ arz)
+            arx = torch.zeros_like(arz, dtype=torch.float64, device=self.device)
+            for i in range(self.Nsample):
+                arx[:,i] = xmean + sigma * self.Az(c_1, m, j, arz[:,i], P, V)
             
             # Cost Evaluation
             cost, x_bin = self.get_cost_samples(arx.T.detach().cpu().numpy())
@@ -144,7 +214,6 @@ class optimizer:
             cost = cost[sorted_index]
             arx = arx[:,sorted_index_tensor]
             x_bin = x_bin[sorted_index,:]
-            counteval += self.Nsample
 
             if self.x_mean_hist is None:
                 self.x_mean_hist = xmean.detach().cpu().numpy().copy()
@@ -193,14 +262,13 @@ class optimizer:
 
             self.save_data(
                 p_c=p_c.detach().cpu().numpy(),
-                p_sigma=p_sigma.detach().cpu().numpy(),
-                B=B.detach().cpu().numpy(),
-                D=D.detach().cpu().numpy(),
+                P=P.detach().cpu().numpy(),
+                V=V.detach().cpu().numpy(),
                 xmean=xmean.detach().cpu().numpy(),
                 sigma=sigma.item(),
-                Cov=Cov.detach().cpu().numpy(),
-                eig_eval=eig_eval,
-                counteval=counteval,
+                s=s.item(),
+                j=j.detach().cpu().numpy(),
+                l=l.detach().cpu().numpy(),
             )
 
             if self.n_iter > self.maxiter:
@@ -208,42 +276,42 @@ class optimizer:
                 break
 
             # Update Mean
+            xmean_prev = xmean.clone()
             xmean = arx[:,:mu] @ weights
-            zmean = arz[:,:mu] @ weights
 
-            # Update Evolution Path and Step Size
-            p_sigma = (1 - c_sigma) * p_sigma + torch.sqrt(c_sigma * (2 - c_sigma) * mu_eff) * (B @ zmean)
-            h_sigma = torch.linalg.norm(p_sigma) / torch.sqrt(1 - (1 - c_sigma)**(2 * counteval / self.Nsample)) / chi_N < 1.4 + 2 / (self.Ndim + 1)
-            h_sigma = h_sigma.to(dtype=torch.float64)
-            p_c = (1 - c_c) * p_c + h_sigma * torch.sqrt(c_c * (2 - c_c) * mu_eff) * (B @ D @ zmean)
+            # Update Evolution Path
+            p_c = (1 - c_c) * p_c + torch.sqrt(c_c * (2 - c_c)) * torch.sqrt(mu_eff) * (xmean - xmean_prev) / sigma
 
-            # Update Covariance Matrix
-            Cov = (1 - c_1 - c_mu) * Cov \
-                + c_1 * (p_c.unsqueeze(-1) @ p_c.unsqueeze(0) + (1 - h_sigma) * c_c * (2 - c_c) * Cov) \
-                + c_mu * (B @ D @ arz[:,:mu]) @ torch.diag(weights) @ (B @ D @ arz[:,:mu]).T
+            v = self.Ainvz(c_1, m, j, p_c, V)
+            j_cur, j, l = self.UpdateSet(N_steps, m, j, l)
+
+            V[j_cur,:] = v
+            P[j_cur,:] = p_c
+
+            if self.n_iter > 0:
+                # Update Step Size
+                ranking = np.argsort(np.hstack((cost, cost_prev)))
+                ranking_cur = np.arange(2 * self.Nsample)[ranking < self.Nsample]
+                ranking_prev = np.arange(2 * self.Nsample)[ranking >= self.Nsample]
+                z_PSR = np.sum(ranking_cur - ranking_prev) / self.Nsample**2 - z_tgt
+
+                s = (1 - c_sigma) * s + c_sigma * z_PSR
+                sigma = sigma * torch.exp(s / d_sigma)
             
-            # Update Step Size
-            sigma = sigma * torch.exp((c_sigma / d_sigma) * (torch.linalg.norm(p_sigma) / chi_N - 1))
-
-            # Update B and D
-            if counteval - eig_eval > self.Nsample / ((c_1 + c_mu) * self.Ndim * 10):
-                eig_eval = counteval
-                Cov = torch.triu(Cov) + torch.triu(Cov, diagonal=1).T
-                [D, B] = torch.linalg.eigh(Cov)
-                D = torch.sqrt(torch.diag(D))
+            cost_prev = cost.copy()
             
             self.n_iter += 1
 
     def run(self, n_seed, output_filename, x0=None, load_data=False):
         if comm.rank == 0:
-            print('### CMA-ES (seed = ' + str(n_seed) + ')\n', flush=True)
+            print('### LM-CMA-ES (seed = ' + str(n_seed) + ')\n', flush=True)
     
         np.random.seed(n_seed)
         self.output_filename = output_filename
         
         if load_data:
-            data_file1 = output_filename + "_CMA_ES_results.npz"
-            data_file2 = output_filename + "_CMA_ES_density_hist.npz"
+            data_file1 = output_filename + "_LM_CMA_ES_results.npz"
+            data_file2 = output_filename + "_LM_CMA_ES_density_hist.npz"
                 
             with np.load(data_file1) as data:
                 self.n_iter = data['n_iter']
@@ -254,8 +322,7 @@ class optimizer:
                 self.sigma_hist = data['sigma_hist'][:self.n_iter]
 
                 sigma = data['sigma']
-                eig_eval = data['eig_eval']
-                counteval = data['counteval']
+                s = data['s']
                 
             with np.load(data_file2) as data:
                 self.x_latent_hist = data['x_latent_hist'][:self.n_iter,:]
@@ -263,11 +330,11 @@ class optimizer:
                 self.best_x_hist = data['best_x_hist'][:self.n_iter,:]
                 
                 p_c = data['p_c']
-                p_sigma = data['p_sigma']
-                B = data['B']
-                D = data['D']
+                P = data['P']
+                V = data['V']
                 x0 = data['xmean']
-                Cov = data['Cov']
+                j = data['j']
+                l = data['l']
 
         else:
             self.n_iter = 0
@@ -284,13 +351,12 @@ class optimizer:
                 # Initial Structure
                 x0 = np.zeros(self.Ndim)
             sigma = None
-            Cov = None
+            s = None
             p_c = None
-            p_sigma = None
-            B = None
-            D = None
-            eig_eval = None
-            counteval = None
+            P = None
+            V = None
+            j = None
+            l = None
         
         if comm.rank == 0:
             print('    | Iter |   N   |  sigma  |  Cost Ens  | Cost Best | t_rem(hr) |',
@@ -299,13 +365,11 @@ class optimizer:
         self.CMA_ES(
             xmean=x0,
             sigma=sigma,
-            Cov=Cov,
             p_c=p_c,
-            p_sigma=p_sigma,
-            B=B,
-            D=D,
-            eig_eval=eig_eval,
-            counteval=counteval,
+            P=P,
+            V=V,
+            j=j,
+            l=l,
         )
         
         self.save_data()
@@ -313,31 +377,29 @@ class optimizer:
     def save_data(
         self,
         p_c=None,
-        p_sigma=None,
-        B=None,
-        D=None,
+        P=None,
+        V=None,
         xmean=None,
         sigma=None,
-        Cov=None,
-        eig_eval=None,
-        counteval=None,
+        s=None,
+        j=None,
+        l=None,
     ):
 
         if comm.rank == 0:
             if p_c is None:
-                with np.load(self.output_filename + "_CMA_ES_density_hist.npz") as data:
+                with np.load(self.output_filename + "_LM_CMA_ES_density_hist.npz") as data:
                     p_c = data['p_c']
-                    p_sigma = data['p_sigma']
-                    B = data['B']
-                    D = data['D']
+                    P = data['P']
+                    V = data['V']
                     xmean = data['xmean']
-                    Cov = data['Cov']
+                    j = data['j']
+                    l = data['l']
 
             if sigma is None:
-                with np.load(self.output_filename + "_CMA_ES_results.npz") as data:
+                with np.load(self.output_filename + "_LM_CMA_ES_results.npz") as data:
                     sigma = data['sigma']
-                    eig_eval = data['eig_eval']
-                    counteval = data['counteval']
+                    s = data['s']
         
             if self.x_mean_hist.ndim == 1:
                 x_mean_final = self.x_mean_hist.copy()
@@ -349,7 +411,7 @@ class optimizer:
                 best_x_final = self.best_x_hist[-1,:]
 
             # Customize below
-            np.savez(self.output_filename + "_CMA_ES_results",
+            np.savez(self.output_filename + "_LM_CMA_ES_results",
                 cost_ensemble_hist=self.cost_ensemble_hist,
                 cost_ensemble_sigma_hist=self.cost_ensemble_sigma_hist,
                 best_cost_hist=self.best_cost_hist,
@@ -359,18 +421,17 @@ class optimizer:
                 best_x_final=best_x_final,
                 n_iter=self.n_iter,
                 sigma=sigma,
-                eig_eval=eig_eval,
-                counteval=counteval,
+                s=s,
             )
                         
-            np.savez(self.output_filename + "_CMA_ES_density_hist",
+            np.savez(self.output_filename + "_LM_CMA_ES_density_hist",
                 x_mean_hist=self.x_mean_hist,
                 x_latent_hist=self.x_latent_hist,
                 best_x_hist=self.best_x_hist,
                 p_c=p_c,
-                p_sigma=p_sigma,
-                B=B,
-                D=D,
+                P=P,
+                V=V,
                 xmean=xmean,
-                Cov=Cov,
+                j=j,
+                l=l,
             )
