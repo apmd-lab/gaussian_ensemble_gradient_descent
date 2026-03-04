@@ -13,6 +13,7 @@
 #define IDX(i, j, W) ((i)*(W) + (j))
 #define SYM_D1 1
 #define SYM_D2 2
+#define SYM_D3 3
 #define SYM_D4 4
 
 // ------------------ Helper: D1 ------------------
@@ -45,6 +46,20 @@ void compute_D2_int(const int* x, int* out, int N_x, int N_y) {
             out[IDX(i_flip, j, N_y)] = val;
             out[IDX(i, j_flip, N_y)] = val;
             out[IDX(i_flip, j_flip, N_y)] = val;
+        }
+    }
+}
+
+// ------------------ Helper: D3 ------------------
+void compute_D3_int(const int* x, int* out, int N) {
+    for (int i = 0; i < N; ++i) {
+        for (int j = i; j < N; ++j) {
+            int v1 = x[IDX(i, j, N)];
+            int v2 = x[IDX(j, i, N)];
+            int val = (v1 != 0) ? v1 : v2;
+
+            out[IDX(i, j, N)] = val;
+            out[IDX(j, i, N)] = val;
         }
     }
 }
@@ -82,6 +97,11 @@ void apply_symmetry_int(
         compute_D1_int(x, out, N_x, N_y);
     } else if (sym_code == SYM_D2) {
         compute_D2_int(x, out, N_x, N_y);
+    } else if (sym_code == SYM_D3) {
+        if (N_x != N_y) {
+            return;
+        }
+        compute_D3_int(x, out, N_x);
     } else if (sym_code == SYM_D4) {
         if (N_x != N_y) {
             return;

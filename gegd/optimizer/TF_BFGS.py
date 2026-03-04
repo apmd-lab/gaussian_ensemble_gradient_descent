@@ -2,6 +2,7 @@ import numpy as np
 from scipy.optimize import minimize, Bounds
 import gegd.parameter_processing.density_transforms as dtf
 import gegd.parameter_processing.symmetry_operations as symOp
+import gegd.parameter_processing.feasible_design_generator.fdg as FDG
 import time
 
 from mpi4py import MPI
@@ -49,13 +50,19 @@ class optimizer:
         elif symmetry == 2:
             self.Ndim = int(np.floor(Nx/2 + 0.5)*np.floor(Ny/2 + 0.5))
         
+        elif symmetry == 3:
+            self.Ndim = int(np.floor(Nx + 0.5)*(np.floor(Nx + 0.5) + 1)/2)
+        
         elif symmetry == 4:
             self.Ndim = int(np.floor(Nx/2 + 0.5)*(np.floor(Nx/2 + 0.5) + 1)/2)
     
-    def grayscale_cost(self, x0):
+    def grayscale_cost(self, x0, skip_filter_and_project=False):
         # Get Brush Binarized Densities ------------------------------------------------------------
-        x_temp = dtf.filter_and_project(x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta, padding=self.padding)
-        x_fp = (symOp.symmetrize(x_temp, self.symmetry, self.Nx, self.Ny).reshape(-1) + 1)/2
+        if skip_filter_and_project:
+            x_fp = x0.copy()
+        else:
+            x_temp = dtf.filter_and_project(x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta, padding=self.padding)
+            x_fp = (symOp.symmetrize(x_temp, self.symmetry, self.Nx, self.Ny).reshape(-1) + 1)/2
 
         # Sample Modified Cost Function --------------------------------------------------------------
         t1 = time.time()
@@ -71,7 +78,10 @@ class optimizer:
         if self.x_latent_hist is None:
             self.x_latent_hist = x0.copy()
         else:
-            self.x_latent_hist = np.vstack((self.x_latent_hist, x0))
+            if skip_filter_and_project:
+                self.x_latent_hist = np.vstack((self.x_latent_hist, self.x_latent_hist[-1,:]))
+            else:
+                self.x_latent_hist = np.vstack((self.x_latent_hist, x0))
         
         if self.x_hist is None:
             self.x_hist = x_fp.copy()
@@ -124,11 +134,11 @@ class optimizer:
         self.output_filename = output_filename
         self.maxiter = maxiter
         self.n_beta = n_beta
-        self.sigma_filter = self.min_feature_size
+        self.sigma_filter = self.min_feature_size / 2
 
         if load_data:
             data_file1 = output_filename + "_TF_results.npz"
-            data_file2 = output_filename + "_TF_density_hist.npz"
+            #data_file2 = output_filename + "_TF_density_hist.npz"
                 
             with np.load(data_file1) as data:
                 i_start = 0
@@ -138,16 +148,18 @@ class optimizer:
                 self.cost_fin = data['cost_fin']
                 self.x_fin = data['x_fin']
                 
-            with np.load(data_file2) as data:
-                self.x_latent_hist = data['x_latent_hist']
-                self.x_hist = data['x_hist']
+            #with np.load(data_file2) as data:
+            #    self.x_latent_hist = data['x_latent_hist']
+            #    self.x_hist = data['x_hist']
+            self.x_latent_hist = None
+            self.x_hist = None
             
         else:
             self.x_latent_hist = None
             self.x_hist = None
             self.cost_hist = None
-            self.cost_fin = np.zeros(self.Ntrial)
-            self.x_fin = np.zeros((self.Ntrial, self.Nx*self.Ny))
+            self.cost_fin = np.zeros((2, self.Ntrial))
+            self.x_fin = np.zeros((2, self.Ntrial, self.Nx*self.Ny))
             
             i_start = 0
             n_start = 0
@@ -177,8 +189,23 @@ class optimizer:
             
             self.beta = np.inf
             f0 = self.grayscale_cost(x0_n)
-            self.cost_fin[n] = f0
-            self.x_fin[n,:] = self.x_hist[-1,:].copy()
+            self.cost_fin[0,n] = f0
+            self.x_fin[0,n,:] = self.x_hist[-1,:].copy()
+
+            x_reward = 2 * self.x_hist[-1,:].reshape(1, self.Nx, self.Ny) - 1
+            x0_feasible = FDG.make_feasible_parallel(
+                x_reward.astype(np.float32),
+                self.min_feature_size,
+                self.periodic,
+                self.symmetry,
+                2,
+                1,
+                self.Nthreads,
+            ).reshape(-1)
+            f0_feasible = self.grayscale_cost(x0_feasible, skip_filter_and_project=True)
+            self.cost_fin[1,n] = f0_feasible
+            self.x_fin[1,n,:] = self.x_hist[-1,:].copy()
+
             self.beta = beta_init
             
             self.save_data()
@@ -188,13 +215,19 @@ class optimizer:
     
     def save_data(self, x0=0, beta=0):
         if comm.rank == 0:
+            if self.x_hist.ndim == 1:
+                x_hist_final = self.x_hist.copy()
+            else:
+                x_hist_final = self.x_hist[-1,:].copy()
+            
             np.savez(self.output_filename + "_TF_results",
                      cost_hist=self.cost_hist,
                      n_iter=self.n_iter,
                      ntrial=self.ntrial,
                      cost_fin=self.cost_fin,
                      x_fin=self.x_fin,
-                     beta=beta)
+                     beta=beta,
+                     x_hist_final=x_hist_final)
                      
             #np.savez(self.output_filename + "_TF_density_hist",
             #         x_hist=self.x_hist,

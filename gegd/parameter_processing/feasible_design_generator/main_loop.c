@@ -48,6 +48,7 @@ int* main_loop(float* score_solid,
             for (int j = 0; j < Ny; ++j) {
                 if (symmetry == 1 && i >= half_x) continue;
                 if (symmetry == 2 && (i >= half_x || j >= half_y)) continue;
+                if (symmetry == 3 && i > j) continue;
                 if (symmetry == 4 && (i > j || j >= half_y)) continue;
 
                 int idx = i * Ny + j;
@@ -197,8 +198,8 @@ int* main_loop(float* score_solid,
         }
         n_empty_touch_solid_prev = n_empty_touch_solid;
         n_empty_touch_void_prev = n_empty_touch_void;
-        //if (n_iter % 100 == 0) {
-        //printf("Iter %d | Unassigned Solid Pixels: %d | Unassigned Solid Touches: %d | Unassigned Void Touches: %d\n", n_iter, n_empty_pix_solid, n_empty_touch_solid, n_empty_touch_void);
+        //if (n_iter % 10 == 0) {
+        //    printf("Iter %d | Unassigned Solid Pixels: %d | Unassigned Solid Touches: %d | Unassigned Void Touches: %d\n", n_iter, n_empty_pix_solid, n_empty_touch_solid, n_empty_touch_void);
         //}
 
         if (n_empty_pix_solid == 0)

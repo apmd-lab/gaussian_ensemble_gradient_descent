@@ -53,53 +53,65 @@ upsample_ratio = args.upsample_ratio
 # (1) get_cost(x, get_grad) --> return cost & gradient(if get_grad==True)
 # (2) set_accuracy(setting)
 #--------------------------------------------------------------------------
-import RCWA_functions.RGB_coupler_FMMAX as objfun
+import RCWA_functions.RGB_color_router_FMMAX as objfun
 
 IPR_exponent = 1/1
-incident_pol = 'TM'
 
-lam = np.array([0.675,0.540,0.450]) # um
+lam = np.array([0.650,0.550,0.450]) # um
 theta_inc = np.array([0])*np.pi/180
 phi_inc = np.array([0])*np.pi/180
 in_plane_wavevector = np.array([0.0, 0.0])
 
-diff_order = np.array([
-    [0,4],
-    [0,5],
-    [0,6],
-])
 period = np.array([Nx * d_pixel, Ny * d_pixel])
-thickness = 0.7
+thickness_background = 1.0
+thickness_capping_layer = 0.0
+thickness_pattern = 0.7
+thickness_spacer = 2.0
+thickness_substrate = 1.0
 
-mat_pattern = np.array(['Air','TiO2_Sarkar']) # Low RI, High RI
-mat_background = np.array(['Air','SiO2_bulk']) # background (incident side), background (exit side)
+mat_background = np.array(['Air']) # background (incident side)
+mat_capping_layer = np.array(['SiO2_bulk'])
+mat_pattern = np.array(['SiO2_bulk','Si3N4_Luke']) # Low RI, High RI
+mat_spacer = np.array(['SiO2_bulk'])
+mat_substrate = np.array(['Si_Schinke_Shkondin'])
 
 cost_obj_high_fidelity = objfun.custom_objective(
     Nx,
     Ny,
     period,
-    thickness,
+    thickness_background,
+    thickness_capping_layer,
+    thickness_pattern,
+    thickness_spacer,
+    thickness_substrate,
     lam,
     in_plane_wavevector,
     mat_background,
+    mat_capping_layer,
     mat_pattern,
-    diff_order,
+    mat_spacer,
+    mat_substrate,
     IPR_exponent=IPR_exponent,
-    incident_pol=incident_pol,
 )
+
 
 cost_obj_low_fidelity = objfun.custom_objective(
     Nx,
     Ny,
     period,
-    thickness,
+    thickness_background,
+    thickness_capping_layer,
+    thickness_pattern,
+    thickness_spacer,
+    thickness_substrate,
     lam,
     in_plane_wavevector,
     mat_background,
+    mat_capping_layer,
     mat_pattern,
-    diff_order,
+    mat_spacer,
+    mat_substrate,
     IPR_exponent=IPR_exponent,
-    incident_pol=incident_pol,
 )
 
 # Optimizer Settings
@@ -108,12 +120,12 @@ cost_obj_low_fidelity = objfun.custom_objective(
 # high-fidelity: accuracy required for actual application
 # low-fidelity: faster and less accurate, but accurate enough to ensure high correlation with the high-fidelity simulations
 #--------------------------------------------------------------------------------------------------------------------------
-low_fidelity_setting = 20**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-high_fidelity_setting = 36**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-t_low_fidelity = 3.52 # low-fidelity simulation time in seconds
-t_high_fidelity = 36.1 # high-fidelity simulation time in seconds
+low_fidelity_setting = 28**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+high_fidelity_setting = 40**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+t_low_fidelity = 16.0 # low-fidelity simulation time in seconds
+t_high_fidelity = 79.7 # high-fidelity simulation time in seconds
 t_iteration = t_high_fidelity*Nensemble # target time per optimization iteration in seconds (actual time may be slightly longer due to the brush generator)
-t_fwd_AD = 48.3
+t_fwd_AD = 136.1
 
 cost_obj_high_fidelity.set_accuracy(high_fidelity_setting)
 cost_obj_low_fidelity.set_accuracy(low_fidelity_setting)
@@ -121,7 +133,7 @@ cost_obj_low_fidelity.set_accuracy(low_fidelity_setting)
 if optimization_algorithm == 'TF_BFGS':
     Ntrial = int(np.round(Nensemble/(t_fwd_AD/t_high_fidelity)))
 
-    output_filename = 'RGB_coupler_IPR' + str(int(1/IPR_exponent)) + '_Ntrial' + str(Ntrial) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+    output_filename = 'RGB_color_router_IPR' + str(int(1/IPR_exponent)) + '_Ntrial' + str(Ntrial) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
     optimizer = TF_BFGS.optimizer(
@@ -143,32 +155,6 @@ if optimization_algorithm == 'TF_BFGS':
     T2 = time.time()
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
-elif optimization_algorithm == 'AF_STE':
-    Ntrial = int(np.round(Nensemble/(t_fwd_AD/t_high_fidelity)))
-    eta = args.eta
-
-    output_filename = 'RGB_coupler_IPR' + str(int(1/IPR_exponent)) + '_Ntrial' + str(Ntrial) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
-        + '_eta' + str(eta) + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
-
-    optimizer = AF_STE.optimizer(
-        Nx=Nx,
-        Ny=Ny,
-        Ntrial=Ntrial,
-        symmetry=symmetry,
-        periodic=periodic,
-        padding=padding,
-        high_fidelity_setting=high_fidelity_setting,
-        brush_size=min_feature_size,
-        upsample_ratio=upsample_ratio,
-        cost_obj=cost_obj_high_fidelity,
-        Nthreads=Nthreads,
-    )
-    
-    T1 = time.time()
-    optimizer.run(n_seed, output_filename, maxiter, eta_ADAM=eta, load_data=load_data)
-    T2 = time.time()
-    print('\n### Total time: ' + str(T2 - T1), flush=True)
-
 elif optimization_algorithm == 'GEGD':
     sigma_RBF = min_feature_size/2/np.sqrt(2)
     sigma_ensemble = args.sigma_ensemble # sampling standard deviation for the ensemble
@@ -177,7 +163,7 @@ elif optimization_algorithm == 'GEGD':
     coeff_exp = args.coeff_exp
     cost_threshold = 0.0
 
-    output_filename = 'RGB_coupler_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+    output_filename = 'RGB_color_router_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_sig_ens' + str(sigma_ensemble) + '_eta' + str(eta) + '_mfs' + str(min_feature_size) + '_exp' + str(coeff_exp) + '_try' + str(n_seed+1)
 
     optimizer = GEGD.optimizer(
@@ -216,7 +202,7 @@ elif optimization_algorithm == 'AF_PSO':
     coeff_social = 1.49
     coeff_inertia = 0.9
 
-    output_filename = 'RGB_coupler_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+    output_filename = 'RGB_color_router_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
     optimizer = AF_PSO.optimizer(
@@ -242,7 +228,7 @@ elif optimization_algorithm == 'AF_PSO':
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
 elif optimization_algorithm == 'AF_GA':
-    output_filename = 'RGB_coupler_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+    output_filename = 'RGB_color_router_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
     optimizer = AF_GA.optimizer(
@@ -268,7 +254,7 @@ elif optimization_algorithm == 'AF_GA':
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
 elif optimization_algorithm == 'sep_CMA_ES':
-    output_filename = 'RGB_coupler_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+    output_filename = 'RGB_color_router_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
     optimizer = sep_CMA_ES.optimizer(

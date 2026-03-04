@@ -32,7 +32,7 @@ int* find_index_max(
     int half_x = (Nx + 1) / 2;// + 2*(1 - periodic)*brush_size;
     int half_y = (Ny + 1) / 2;// + 2*(1 - periodic)*brush_size;
     
-    const float threshold = 1e-4f;
+    const float threshold = 1e-6f;
 
     for (int i = 0; i < Nx; ++i) {
         for (int j = 0; j < Ny; ++j) {
@@ -63,6 +63,12 @@ int* find_index_max(
                 }
             } else if (symmetry == 2) {
                 if (i < half_x && j < half_y && touch[idx] == 0) {
+                    result[0] = i;
+                    result[1] = j;
+                    return result;
+                }
+            } else if (symmetry == 3) {
+                if (i <= j && touch[idx] == 0) {
                     result[0] = i;
                     result[1] = j;
                     return result;

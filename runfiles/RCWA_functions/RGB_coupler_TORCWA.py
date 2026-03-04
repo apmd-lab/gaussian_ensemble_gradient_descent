@@ -1,7 +1,7 @@
 import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
-sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
+sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
 
 import numpy as np
 import torcwa

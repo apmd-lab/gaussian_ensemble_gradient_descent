@@ -51,7 +51,19 @@ class optimizer:
     
     def straight_through_jacobian(self, x0):
         # Get Brush Binarized Densities ------------------------------------------------------------
-        x_bin = dtf.binarize(x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.brush_size, self.brush_shape, self.beta_proj, self.sigma_filter, padding=self.padding, Nthreads=self.Nthreads)
+        x_bin = dtf.binarize(
+            x0,
+            self.symmetry,
+            self.periodic,
+            self.Nx,
+            self.Ny,
+            self.brush_size,
+            self.brush_shape,
+            self.beta_proj,
+            self.sigma_filter,
+            padding=self.padding,
+            Nthreads=self.Nthreads
+        )
 
         # Sample Modified Cost Function --------------------------------------------------------------
         self.cost_obj.set_accuracy(self.high_fidelity_setting)

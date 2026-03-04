@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #SBATCH -o /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/slurm/run_optimization.log-%j
-#SBATCH --partition=48core
-#SBATCH --nodelist=node1
+#SBATCH --partition=32core
+#SBATCH --nodelist=node4
 #SBATCH --job-name=ens_opt
 ##SBATCH --exclusive
 
@@ -13,12 +13,12 @@ export NUMEXPR_NUM_THREADS=1
 
 ## Test Function RBF -----------------------------------------------------
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=12
+#SBATCH --cpus-per-task=16
 
 ## TF_BFGS
 ##for i in {0..9}
 ##do
-##    python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py --Nthreads 12 --n_seed $i --load_data 0 --optimizer 'TF_BFGS' --symmetry 1 --upsample_ratio 1 --maxiter 500 --brush_size 7
+##    python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py --Nthreads 12 --n_seed $i --load_data 0 --optimizer 'TF_BFGS' --symmetry 4 --upsample_ratio 1 --maxiter 500 --brush_size 7
 ##done
 
 ## AF_STE
@@ -27,11 +27,11 @@ export NUMEXPR_NUM_THREADS=1
 ##    python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py --Nthreads 12 --n_seed $i --load_data 0 --optimizer 'AF_STE' --symmetry 1 --upsample_ratio 1 --maxiter 500 --eta 0.001 --brush_size 7
 ##done
 
-## ACMA_ES
-for i in {0..9}
-do
-    python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py --Nthreads 12 --n_seed $i --load_data 0 --optimizer 'ACMA_ES' --Nx 105 --Ny 105 --symmetry 0 --upsample_ratio 1 --maxiter 200 --eta 0.1 --min_feature_size 7 --zoom_factor 1.0
-done
+## GEGD
+##for i in {0..9}
+##do
+##    python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py --Nthreads 32 --n_seed $i --load_data 0 --optimizer 'GEGD' --symmetry 4 --upsample_ratio 1 --coeff_exp 20 --maxiter 500 --sigma_ensemble_max 2e-3 --eta 2e-5 --brush_size 7
+##done
 
 ## AF_PSO
 ##for i in {0..9}
@@ -45,11 +45,11 @@ done
 ##    python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py --Nthreads 12 --n_seed $i --load_data 0 --optimizer 'AF_GA' --symmetry 1 --upsample_ratio 1 --maxiter 500 --brush_size 7
 ##done
 
-## AF_NES
-##for i in {0..9}
-##do
-##    python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py --Nthreads 12 --n_seed $i --load_data 0 --optimizer 'AF_NES' --symmetry 4 --upsample_ratio 1 --maxiter 500 --sigma_ensemble_max 0.001 --eta 0.000001 --brush_size 7
-##done
+## AF_CMA_ES
+for i in {0..9}
+do
+    python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py --Nthreads 16 --n_seed $i --load_data 0 --optimizer 'AF_CMA_ES' --Nx 75 --Ny 75 --symmetry 0 --upsample_ratio 1 --maxiter 200 --min_feature_size 5 --zoom_factor 0.71
+done
 
 ## Diffraction Grating ---------------------------------------------------
 ##SBATCH --ntasks=1

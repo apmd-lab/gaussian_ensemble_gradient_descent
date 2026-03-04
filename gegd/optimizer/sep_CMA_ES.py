@@ -57,6 +57,9 @@ class optimizer:
         elif symmetry == 2:
             self.Ndim = int(np.floor(Nx/2 + 0.5)*np.floor(Ny/2 + 0.5))
         
+        elif symmetry == 3:
+            self.Ndim = int(np.floor(Nx + 0.5)*(np.floor(Nx + 0.5) + 1)/2)
+        
         elif symmetry == 4:
             self.Ndim = int(np.floor(Nx/2 + 0.5)*(np.floor(Nx/2 + 0.5) + 1)/2)
         

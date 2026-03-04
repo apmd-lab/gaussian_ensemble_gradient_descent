@@ -7,12 +7,12 @@ import numpy as np
 from scipy.ndimage import gaussian_filter, zoom
 import time
 
-Nthreads = 1
+Nthreads = 8
 
 # Geometry
-Nx = 60
-Ny = 263
-symmetry = 1 # Currently supported: (None), (D1,2,4)
+Nx = 100
+Ny = 100
+symmetry = 3 # Currently supported: (None), (D1,2,4)
 periodic = 1
 padding = None
 min_feature_size = 7 # minimum feature size in pixels
@@ -26,53 +26,64 @@ upsampling_ratio = 9
 # (1) get_cost(x, get_grad) --> return cost & gradient(if get_grad==True)
 # (2) set_accuracy(setting)
 #--------------------------------------------------------------------------
-import RCWA_functions.RGB_coupler_FMMAX as objfun
+import RCWA_functions.RGB_color_router_FMMAX as objfun
 
 IPR_exponent = 1/1
-incident_pol = 'TM'
 
-lam = np.array([0.675,0.540,0.450]) # um
+lam = np.array([0.650,0.550,0.450]) # um
 theta_inc = np.array([0])*np.pi/180
 phi_inc = np.array([0])*np.pi/180
 in_plane_wavevector = np.array([0.0, 0.0])
 
-diff_order = np.array([
-    [0,4],
-    [0,5],
-    [0,6],
-])
 period = np.array([Nx * d_pixel, Ny * d_pixel])
-thickness = 0.7
+thickness_background = 1.0
+thickness_capping_layer = 0.0
+thickness_pattern = 0.7
+thickness_spacer = 2.0
+thickness_substrate = 1.0
 
-mat_pattern = np.array(['Air','TiO2_Sarkar']) # Low RI, High RI
-mat_background = np.array(['Air','SiO2_bulk']) # background (incident side), background (exit side)
+mat_background = np.array(['Air']) # background (incident side)
+mat_capping_layer = np.array(['SiO2_bulk'])
+mat_pattern = np.array(['SiO2_bulk','Si3N4_Luke']) # Low RI, High RI
+mat_spacer = np.array(['SiO2_bulk'])
+mat_substrate = np.array(['Si_Schinke_Shkondin'])
 
 cost_obj = objfun.custom_objective(
     Nx,
     Ny,
     period,
-    thickness,
+    thickness_background,
+    thickness_capping_layer,
+    thickness_pattern,
+    thickness_spacer,
+    thickness_substrate,
     lam,
     in_plane_wavevector,
     mat_background,
+    mat_capping_layer,
     mat_pattern,
-    diff_order,
+    mat_spacer,
+    mat_substrate,
     IPR_exponent=IPR_exponent,
-    incident_pol=incident_pol,
 )
 
 cost_obj_upsampled = objfun.custom_objective(
     Nx * upsampling_ratio,
     Ny * upsampling_ratio,
     period,
-    thickness,
+    thickness_background,
+    thickness_capping_layer,
+    thickness_pattern,
+    thickness_spacer,
+    thickness_substrate,
     lam,
     in_plane_wavevector,
     mat_background,
+    mat_capping_layer,
     mat_pattern,
-    diff_order,
+    mat_spacer,
+    mat_substrate,
     IPR_exponent=IPR_exponent,
-    incident_pol=incident_pol,
 )
 
 # Optimizer Settings
@@ -81,8 +92,8 @@ cost_obj_upsampled = objfun.custom_objective(
 # high-fidelity: accuracy required for actual application
 # low-fidelity: faster and less accurate, but accurate enough to ensure high correlation with the high-fidelity simulations
 #--------------------------------------------------------------------------------------------------------------------------
-low_fidelity_setting = 20**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-high_fidelity_setting = 36**2 # 30 | 38 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+low_fidelity_setting = 14**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+high_fidelity_setting = 24**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
 cost_obj.set_accuracy(high_fidelity_setting)
 cost_obj_upsampled.set_accuracy(high_fidelity_setting)
 
@@ -104,28 +115,24 @@ print('### Running Simulations', flush=True)
 #np.savez(directory + '/results/brush_simulation_' + suffix, Txx=Txx, Tyy=Tyy, y_field=y_field, z_field=z_field, ReExx=ReExx, ReEyy=ReEyy, x=x)
 
 print('\tGEGD', flush=True)
-with np.load(directory + "/RGB_coupler_IPR1_Nensemble20_Ndim60x263_D1_sig_ens0.01_eta5e-05_mfs7_exp20_try1_GEGD_results.npz") as data:
+with np.load(directory + "/RGB_color_router_IPR1_Nensemble10_Ndim100x100_D3_sig_ens0.01_eta2e-05_mfs7_exp20_try1_GEGD_results.npz") as data:
     x = data['best_x_final'].reshape(Nx, Ny)
-T_tgt, E_in_plane, x_grid, y_grid, z_grid, transmitted_power, incident_power = cost_obj.get_diffraction_and_fields(x)
+flux, R_flux, G_flux, B_flux, incident_flux = cost_obj.get_detector_flux(x)
 x_up = np.where(gaussian_filter(zoom(x.astype(np.float64), upsampling_ratio, order=1, mode='wrap'), sigma=upsampling_ratio, mode='wrap') > 0.5, 1, 0)
-T_tgt_up, E_in_plane_up, x_grid_up, y_grid_up, z_grid_up, transmitted_power_up, incident_power_up = cost_obj_upsampled.get_diffraction_and_fields(x_up)
-np.savez(directory + '/RGB_coupler_IPR1_Nensemble20_Ndim60x263_D1_sig_ens0.01_eta5e-05_mfs7_exp20_try1_GEGD_simulation',
-    T_tgt=T_tgt,
-    E_in_plane=E_in_plane,
-    x_grid=x_grid,
-    y_grid=y_grid,
-    z_grid=z_grid,
-    transmitted_power=transmitted_power,
-    incident_power=incident_power,
+flux_up, R_flux_up, G_flux_up, B_flux_up, incident_flux_up = cost_obj_upsampled.get_detector_flux(x_up)
+np.savez(directory + '/RGB_color_router_IPR1_Nensemble10_Ndim100x100_D3_sig_ens0.01_eta2e-05_mfs7_exp20_try1_GEGD_simulation',
+    flux=flux,
+    R_flux=R_flux,
+    G_flux=G_flux,
+    B_flux=B_flux,
+    incident_flux=incident_flux,
     x=x,
-    T_tgt_up=T_tgt_up,
-    E_in_plane_up=E_in_plane_up,
     x_up=x_up,
-    x_grid_up=x_grid_up,
-    y_grid_up=y_grid_up,
-    z_grid_up=z_grid_up,
-    transmitted_power_up=transmitted_power_up,
-    incident_power_up=incident_power_up,
+    flux_up=flux_up,
+    R_flux_up=R_flux_up,
+    G_flux_up=G_flux_up,
+    B_flux_up=B_flux_up,
+    incident_flux_up=incident_flux_up,
 )
 
 #print('\tPSO', flush=True)

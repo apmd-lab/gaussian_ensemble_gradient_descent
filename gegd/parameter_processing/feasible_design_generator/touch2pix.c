@@ -39,7 +39,7 @@ void touch2pix(int dx,
 
     free(rolled);
 
-    if (symmetry == 1 || symmetry == 2 || symmetry == 4) {
+    if (symmetry == 1 || symmetry == 2 || symmetry == 3 || symmetry == 4) {
         int* sym1 = (int*)malloc(size * sizeof(int));
         apply_symmetry_int(
             touch1,

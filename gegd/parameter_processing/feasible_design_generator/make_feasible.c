@@ -289,7 +289,7 @@ int* make_feasible(
         save_int_array_to_npy("touch_solid.npy", touch_solid, Nx_up, Ny_up);
         save_int_array_to_npy("touch_void.npy", touch_void, Nx_up, Ny_up);
         save_int_array_to_npy("pix_solid.npy", pix_solid, Nx_up, Ny_up);
-        //exit(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     }
     
     free(touch_solid_pos);

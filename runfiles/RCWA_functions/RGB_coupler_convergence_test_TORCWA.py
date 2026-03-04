@@ -1,7 +1,7 @@
 import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
-sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
+sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
 
 import numpy as np
 import torch
@@ -9,7 +9,7 @@ from itertools import product
 import time
 import gegd.parameter_processing.density_transforms as dtf
 
-Nthreads = 1
+Nthreads = 48
 cuda_ind = 0
 
 # Geometry
@@ -18,9 +18,9 @@ Ny = 269
 symmetry = 1 # Currently supported: (None), (D1,2,4)
 periodic = 1
 padding = None
-minimum_feature_size = 9 # minimum feature size in pixels
+min_feature_size = 9 # minimum feature size in pixels
 d_pixel = 0.008 # pixel side length (nm)
-feasible_design_generation_method = 'two_phase_projection' # brush / two_phase_projection
+feasible_design_generation_method = 'brush' # brush / two_phase_projection
 upsample_ratio = 1
 
 if symmetry == 0:
@@ -64,7 +64,7 @@ cost_obj = objfun.custom_objective(mat_background,
                                    mat_pattern,
                                    Nthreads,
                                    diff_order,
-                                   IPR_exponent=0.5,
+                                   IPR_exponent=1/5,
                                    cuda_ind=cuda_ind)
 
 cost_obj.set_geometry(Nx*upsample_ratio, Ny*upsample_ratio, period, thickness)
@@ -83,23 +83,34 @@ x_brush_all = dtf.binarize(
     periodic,
     Nx,
     Ny,
-    minimum_feature_size,
+    min_feature_size,
     'circle',
-    16.0,
-    minimum_feature_size/8,
+    8.0,
+    min_feature_size/2,
     method=feasible_design_generation_method,
     print_runtime_details=True,
 )
 t2 = time.time()
 brush_time = t2 - t1
 
-max_harmonic_x = 10
-max_harmonic_y = 20
-cost_all = np.zeros((n_struct, max_harmonic_x, max_harmonic_y))
-sim_time = np.zeros((n_struct, max_harmonic_x, max_harmonic_y))
-sim_time_AD = np.zeros((n_struct, max_harmonic_x, max_harmonic_y))
+load_data = True
 
-for nb in range(n_struct):
+max_harmonic_x = 12
+max_harmonic_y = 30
+
+if load_data:
+    with np.load("RGB_coupler_convergence_test_Nx" + str(Nx) + "_Ny" + str(Ny) + "_mfs" + str(min_feature_size) + ".npz") as data:
+        cost_all = data['cost_all']
+        sim_time = data['sim_time']
+        sim_time_AD = data['sim_time_AD']
+        n_start = np.argmin(sim_time[:,0,0]) - 1
+else:
+    cost_all = np.zeros((n_struct, max_harmonic_x, max_harmonic_y))
+    sim_time = np.zeros((n_struct, max_harmonic_x, max_harmonic_y))
+    sim_time_AD = np.zeros((n_struct, max_harmonic_x, max_harmonic_y))
+    n_start = 0
+
+for nb in range(n_start, n_struct):
     print('\tStructure ' + str(nb), flush=True)
     
     for nhx in range(1, max_harmonic_x + 1):
@@ -123,7 +134,7 @@ for nb in range(n_struct):
         
             print(' | Fwd+AD Time: ' + str(sim_time_AD[nb,nhx-1,nhy-1]) + ' s', flush=True)
         
-            np.savez("RGB_coupler_convergence_test_Nx" + str(Nx) + "_Ny" + str(Ny) + "_mfs" + str(minimum_feature_size),
+            np.savez("RGB_coupler_convergence_test_Nx" + str(Nx) + "_Ny" + str(Ny) + "_mfs" + str(min_feature_size),
                 cost_all=cost_all,
                 brush_time=brush_time,
                 sim_time=sim_time,

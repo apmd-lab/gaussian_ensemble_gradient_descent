@@ -50,7 +50,7 @@ void make_touch(int solid_flag,
     free(rolled_mask);
 
     // Apply symmetry to pix_solid
-    if (symmetry == 1 || symmetry == 2 || symmetry == 4) {
+    if (symmetry == 1 || symmetry == 2 || symmetry == 3 || symmetry == 4) {
         int* sym_pix = (int*)malloc(Nx * Ny * sizeof(int));
         apply_symmetry_int(
             pix_solid,

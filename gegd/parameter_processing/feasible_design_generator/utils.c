@@ -1,11 +1,8 @@
-#define PY_ARRAY_UNIQUE_SYMBOL MY_MODULE_ARRAY_API
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-#define NO_IMPORT_ARRAY
-#include <numpy/arrayobject.h>
-
 #include <stdlib.h>
-#include <Python.h>
+#include <stdio.h>
+#include <stdint.h>
 #include <string.h>
+#include <math.h>
 
 #include "utils.h"
 
@@ -166,31 +163,59 @@ void crop_2d(const int* input,
 }
 
 void save_int_array_to_npy(const char* filename, int* data, int Nx, int Ny) {
-    npy_intp dims[2] = {Nx, Ny};
-    PyObject* array = PyArray_SimpleNewFromData(2, dims, NPY_INT, data);
-    PyObject* np = PyImport_ImportModule("numpy");
-    PyObject* save_func = PyObject_GetAttrString(np, "save");
-    PyObject* py_filename = PyUnicode_FromString(filename);
-    PyObject* args = PyTuple_Pack(2, py_filename, array);
-    PyObject_CallObject(save_func, args);
-    Py_DECREF(array);
-    Py_DECREF(save_func);
-    Py_DECREF(py_filename);
-    Py_DECREF(args);
-    Py_DECREF(np);
+    FILE* fp = fopen(filename, "wb");
+    if (!fp) return;
+
+    unsigned char magic[8] = {0x93, 'N', 'U', 'M', 'P', 'Y', 0x01, 0x00};
+    char dict[256];
+    sprintf(dict, "{'descr': '<i4', 'fortran_order': False, 'shape': (%d, %d), }", Nx, Ny);
+
+    int dict_len = strlen(dict);
+    int unpadded_len = 10 + dict_len + 1;
+    int pad_len = (64 - (unpadded_len % 64)) % 64;
+    int header_len = dict_len + pad_len + 1;
+
+    uint16_t header_len_le = (uint16_t)header_len;
+
+    fwrite(magic, 1, 8, fp);
+    fwrite(&header_len_le, 2, 1, fp);
+    fwrite(dict, 1, dict_len, fp);
+    for (int i = 0; i < pad_len; ++i) {
+        fputc(' ', fp);
+    }
+    fputc('\n', fp);
+
+    size_t num_elements = ((size_t)Nx) * ((size_t)Ny);
+    fwrite(data, sizeof(int), num_elements, fp);
+
+    fclose(fp);
 }
 
 void save_float_array_to_npy(const char* filename, float* data, int Nx, int Ny) {
-    npy_intp dims[2] = {Nx, Ny};
-    PyObject* array = PyArray_SimpleNewFromData(2, dims, NPY_FLOAT, data);
-    PyObject* np = PyImport_ImportModule("numpy");
-    PyObject* save_func = PyObject_GetAttrString(np, "save");
-    PyObject* py_filename = PyUnicode_FromString(filename);
-    PyObject* args = PyTuple_Pack(2, py_filename, array);
-    PyObject_CallObject(save_func, args);
-    Py_DECREF(array);
-    Py_DECREF(save_func);
-    Py_DECREF(py_filename);
-    Py_DECREF(args);
-    Py_DECREF(np);
+    FILE* fp = fopen(filename, "wb");
+    if (!fp) return;
+
+    unsigned char magic[8] = {0x93, 'N', 'U', 'M', 'P', 'Y', 0x01, 0x00};
+    char dict[256];
+    sprintf(dict, "{'descr': '<f4', 'fortran_order': False, 'shape': (%d, %d), }", Nx, Ny);
+
+    int dict_len = strlen(dict);
+    int unpadded_len = 10 + dict_len + 1;
+    int pad_len = (64 - (unpadded_len % 64)) % 64;
+    int header_len = dict_len + pad_len + 1;
+
+    uint16_t header_len_le = (uint16_t)header_len;
+
+    fwrite(magic, 1, 8, fp);
+    fwrite(&header_len_le, 2, 1, fp);
+    fwrite(dict, 1, dict_len, fp);
+    for (int i = 0; i < pad_len; ++i) {
+        fputc(' ', fp);
+    }
+    fputc('\n', fp);
+
+    size_t num_elements = ((size_t)Nx) * ((size_t)Ny);
+    fwrite(data, sizeof(float), num_elements, fp);
+
+    fclose(fp);
 }

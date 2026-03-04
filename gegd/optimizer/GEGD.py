@@ -21,8 +21,6 @@ class optimizer:
                  t_low_fidelity,
                  t_high_fidelity,
                  t_iteration,
-                 high_fidelity_setting,
-                 low_fidelity_setting,
                  min_feature_size,
                  sigma_RBF,
                  sigma_ensemble=1.0,
@@ -33,7 +31,8 @@ class optimizer:
                  covariance_type='constant',
                  coeff_exp=5,
                  cost_threshold=0,
-                 cost_obj=None,
+                 cost_obj_high_fidelity=None,
+                 cost_obj_low_fidelity=None,
                  Nthreads=1,
                  cuda_ind=0,
                  verbosity=1,
@@ -58,11 +57,10 @@ class optimizer:
         self.sigma_filter = sigma_RBF #min_feature_size/2/np.sqrt(2)
         self.sigma_RBF = sigma_RBF #min_feature_size/2/np.sqrt(2)
         self.covariance_type = covariance_type
-        self.high_fidelity_setting = high_fidelity_setting
-        self.low_fidelity_setting = low_fidelity_setting
         self.coeff_exp = coeff_exp
         self.cost_threshold = cost_threshold
-        self.cost_obj = cost_obj
+        self.cost_obj_high_fidelity = cost_obj_high_fidelity
+        self.cost_obj_low_fidelity = cost_obj_low_fidelity
         self.Nthreads = Nthreads
         self.cuda_ind = cuda_ind
         self.device = 'cuda:' + str(cuda_ind) if torch.cuda.is_available() else 'cpu'
@@ -77,6 +75,9 @@ class optimizer:
         
         elif symmetry == 2:
             self.Ndim = int(np.floor(Nx/2 + 0.5)*np.floor(Ny/2 + 0.5))
+        
+        elif symmetry == 3:
+            self.Ndim = int(np.floor(Nx + 0.5)*(np.floor(Nx + 0.5) + 1)/2)
         
         elif symmetry == 4:
             self.Ndim = int(np.floor(Nx/2 + 0.5)*(np.floor(Nx/2 + 0.5) + 1)/2)
@@ -181,6 +182,26 @@ class optimizer:
                     
                     self.cov_g[i*DOF_y+j,:] = symOp.desymmetrize(kernel, self.symmetry, self.Nx, self.Ny)
         
+        elif self.symmetry == 3:
+            triu_ind = np.triu_indices(int(np.floor(self.Nx + 0.5)))
+            
+            for i in range(self.Ndim):
+                delta = np.zeros((self.Nx, self.Ny))
+                if triu_ind[0][i] == triu_ind[1][i]:
+                    c = 2
+                else:
+                    c = 1
+                
+                delta[triu_ind[0][i],triu_ind[1][i]] = c
+                delta = symOp.symmetrize(delta[triu_ind], self.symmetry, self.Nx, self.Ny)
+                if self.periodic:
+                    kernel = gaussian_filter(delta, self.sigma_RBF, mode='wrap')
+                else:
+                    kernel = gaussian_filter(delta, self.sigma_RBF, mode='constant')
+                #kernel = np.tanh(projection_target*kernel/np.max(kernel))
+                
+                self.cov_g[i,:] = symOp.desymmetrize(kernel, self.symmetry, self.Nx, self.Ny)
+
         elif self.symmetry == 4:
             triu_ind = np.triu_indices(int(np.floor(self.Nx/2 + 0.5)))
             
@@ -403,13 +424,14 @@ class optimizer:
             print('--> Feasible Design Generation: ', t2-t1, flush=True)
         
         # Sample Modified Cost Function --------------------------------------------------------------
-        self.cost_obj.set_accuracy(self.high_fidelity_setting)
-
         t1 = time.time()
         f = np.zeros(self.Nensemble)
         f_logDeriv = np.zeros((self.Nensemble, self.Ndim+self.Nsigma))
         for n in range(self.Nensemble):
-            f_temp = self.cost_obj.get_cost(x_sample[n,:], False)
+            #t1 = time.time()
+            f_temp = self.cost_obj_high_fidelity.get_cost(x_sample[n,:], False)
+            #t2 = time.time()
+            #print('time: ' + str(t2 - t1), flush=True)
             f_shifted = (f_temp - self.cost_threshold)/(self.cost_threshold + 1)
             f[n] = -np.exp(-self.coeff_exp*f_shifted)
             #f[n] = f_temp
@@ -434,12 +456,13 @@ class optimizer:
         x_best = x_sample[np.argmin(f),:].copy()
         
         # Sample Control Variate Function ----------------------------------------------------------------
-        self.cost_obj.set_accuracy(self.low_fidelity_setting)
-        
         f_ctrl_all = np.zeros(self.r_CV*self.Nensemble)
         f_ctrl_logDeriv_all = np.zeros((self.r_CV*self.Nensemble, self.Ndim+self.Nsigma))
         for n in range(self.r_CV*self.Nensemble):
-            f_temp = self.cost_obj.get_cost(x_sample[n,:], False)
+            #t1 = time.time()
+            f_temp = self.cost_obj_low_fidelity.get_cost(x_sample[n,:], False)
+            #t2 = time.time()
+            #print('time: ' + str(t2 - t1), flush=True)
             f_shifted = (f_temp - self.cost_threshold)/(self.cost_threshold + 1)
             f_ctrl_all[n] = -np.exp(-self.coeff_exp*f_shifted)
             #f_ctrl_all[n] = f_temp
@@ -810,6 +833,8 @@ class optimizer:
                 if self.Nsigma > 1:
                     self.sigma_hist = data['sigma_hist'][:self.n_iter,:]
                     self.sigma_fp_hist = data['sigma_fp_hist'][:self.n_iter,:]
+                else:
+                    self.sigma_fp_hist = data['sigma_fp_hist'][:self.n_iter]
                 self.corr_mu_hist = data['corr_mu_hist'][:self.n_iter,:]
                 self.corr_sigma_hist = data['corr_sigma_hist'][:self.n_iter,:]
                 x0 = data['x_bounded']

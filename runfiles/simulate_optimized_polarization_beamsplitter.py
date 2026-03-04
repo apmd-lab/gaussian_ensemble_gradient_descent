@@ -7,11 +7,11 @@ import numpy as np
 from scipy.ndimage import gaussian_filter, zoom
 import time
 
-Nthreads = 1
+Nthreads = 8
 
 # Geometry
-Nx = 60
-Ny = 263
+Nx = 45
+Ny = 90
 symmetry = 1 # Currently supported: (None), (D1,2,4)
 periodic = 1
 padding = None
@@ -26,26 +26,22 @@ upsampling_ratio = 9
 # (1) get_cost(x, get_grad) --> return cost & gradient(if get_grad==True)
 # (2) set_accuracy(setting)
 #--------------------------------------------------------------------------
-import RCWA_functions.RGB_coupler_FMMAX as objfun
+import RCWA_functions.polarization_beamsplitter_FMMAX as objfun
 
-IPR_exponent = 1/1
-incident_pol = 'TM'
-
-lam = np.array([0.675,0.540,0.450]) # um
+lam = np.array([0.633]) # um
 theta_inc = np.array([0])*np.pi/180
 phi_inc = np.array([0])*np.pi/180
 in_plane_wavevector = np.array([0.0, 0.0])
 
 diff_order = np.array([
-    [0,4],
-    [0,5],
-    [0,6],
+    [0,-1],
+    [0,1],
 ])
 period = np.array([Nx * d_pixel, Ny * d_pixel])
-thickness = 0.7
+thickness = 0.3
 
-mat_pattern = np.array(['Air','TiO2_Sarkar']) # Low RI, High RI
-mat_background = np.array(['Air','SiO2_bulk']) # background (incident side), background (exit side)
+mat_pattern = np.array(['Air','Si_Schinke_Shkondin']) # Low RI, High RI
+mat_background = np.array(['SiO2_bulk','Air']) # background (incident side), background (exit side)
 
 cost_obj = objfun.custom_objective(
     Nx,
@@ -57,8 +53,7 @@ cost_obj = objfun.custom_objective(
     mat_background,
     mat_pattern,
     diff_order,
-    IPR_exponent=IPR_exponent,
-    incident_pol=incident_pol,
+    IPR_exponent=1/1,
 )
 
 cost_obj_upsampled = objfun.custom_objective(
@@ -71,8 +66,7 @@ cost_obj_upsampled = objfun.custom_objective(
     mat_background,
     mat_pattern,
     diff_order,
-    IPR_exponent=IPR_exponent,
-    incident_pol=incident_pol,
+    IPR_exponent=1/1,
 )
 
 # Optimizer Settings
@@ -81,8 +75,8 @@ cost_obj_upsampled = objfun.custom_objective(
 # high-fidelity: accuracy required for actual application
 # low-fidelity: faster and less accurate, but accurate enough to ensure high correlation with the high-fidelity simulations
 #--------------------------------------------------------------------------------------------------------------------------
-low_fidelity_setting = 20**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-high_fidelity_setting = 36**2 # 30 | 38 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+low_fidelity_setting = 19**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+high_fidelity_setting = 36**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
 cost_obj.set_accuracy(high_fidelity_setting)
 cost_obj_upsampled.set_accuracy(high_fidelity_setting)
 
@@ -104,28 +98,36 @@ print('### Running Simulations', flush=True)
 #np.savez(directory + '/results/brush_simulation_' + suffix, Txx=Txx, Tyy=Tyy, y_field=y_field, z_field=z_field, ReExx=ReExx, ReEyy=ReEyy, x=x)
 
 print('\tGEGD', flush=True)
-with np.load(directory + "/RGB_coupler_IPR1_Nensemble20_Ndim60x263_D1_sig_ens0.01_eta5e-05_mfs7_exp20_try1_GEGD_results.npz") as data:
+with np.load(directory + "/polarization_beamsplitter_IPR1_Nensemble10_Ndim45x90_D1_sig_ens0.01_eta5e-05_mfs7_exp20_try1_GEGD_results.npz") as data:
     x = data['best_x_final'].reshape(Nx, Ny)
-T_tgt, E_in_plane, x_grid, y_grid, z_grid, transmitted_power, incident_power = cost_obj.get_diffraction_and_fields(x)
+T_TE, T_TM, Ex, Ey, x_grid, y_grid, z_grid, transmitted_power, incident_power, coeffs, idx_tgt = cost_obj.get_diffraction_and_fields(x)
 x_up = np.where(gaussian_filter(zoom(x.astype(np.float64), upsampling_ratio, order=1, mode='wrap'), sigma=upsampling_ratio, mode='wrap') > 0.5, 1, 0)
-T_tgt_up, E_in_plane_up, x_grid_up, y_grid_up, z_grid_up, transmitted_power_up, incident_power_up = cost_obj_upsampled.get_diffraction_and_fields(x_up)
-np.savez(directory + '/RGB_coupler_IPR1_Nensemble20_Ndim60x263_D1_sig_ens0.01_eta5e-05_mfs7_exp20_try1_GEGD_simulation',
-    T_tgt=T_tgt,
-    E_in_plane=E_in_plane,
+T_TE_up, T_TM_up, Ex_up, Ey_up, x_grid_up, y_grid_up, z_grid_up, transmitted_power_up, incident_power_up, coeffs_up, idx_tgt_up = cost_obj_upsampled.get_diffraction_and_fields(x_up)
+np.savez(directory + '/polarization_beamsplitter_IPR1_Nensemble10_Ndim45x90_D1_sig_ens0.01_eta5e-05_mfs7_exp20_try1_GEGD_simulation',
+    x=x,
+    x_up=x_up,
+    T_TE=T_TE,
+    T_TM=T_TM,
+    Ex=Ex,
+    Ey=Ey,
     x_grid=x_grid,
     y_grid=y_grid,
     z_grid=z_grid,
     transmitted_power=transmitted_power,
     incident_power=incident_power,
-    x=x,
-    T_tgt_up=T_tgt_up,
-    E_in_plane_up=E_in_plane_up,
-    x_up=x_up,
+    coeffs=coeffs,
+    idx_tgt=idx_tgt,
+    T_TE_up=T_TE_up,
+    T_TM_up=T_TM_up,
+    Ex_up=Ex_up,
+    Ey_up=Ey_up,
     x_grid_up=x_grid_up,
     y_grid_up=y_grid_up,
     z_grid_up=z_grid_up,
     transmitted_power_up=transmitted_power_up,
     incident_power_up=incident_power_up,
+    coeffs_up=coeffs_up,
+    idx_tgt_up=idx_tgt_up,
 )
 
 #print('\tPSO', flush=True)

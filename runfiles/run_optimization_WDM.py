@@ -40,11 +40,9 @@ cuda_ind = 0
 Nx = args.Nx
 Ny = args.Ny
 symmetry = args.symmetry # Currently supported: (None), (D1,2,4)
-periodic = 1
-padding = None
-min_feature_size = args.min_feature_size
-d_pixel = 0.01 # pixel side length (nm)
-feasible_design_generation_method = 'brush' # brush / two_phase_projection
+periodic = 0
+min_feature_size = args.min_feature_size # minimum feature size in pixels
+feasible_design_generation_method = 'brush'
 upsample_ratio = args.upsample_ratio
 
 # Define Cost Object
@@ -53,53 +51,71 @@ upsample_ratio = args.upsample_ratio
 # (1) get_cost(x, get_grad) --> return cost & gradient(if get_grad==True)
 # (2) set_accuracy(setting)
 #--------------------------------------------------------------------------
-import RCWA_functions.RGB_coupler_FMMAX as objfun
+import FDTD_functions.WDM_ceviche as objfun
 
-IPR_exponent = 1/1
-incident_pol = 'TM'
+IPR_exponent = 1/5
 
-lam = np.array([0.675,0.540,0.450]) # um
-theta_inc = np.array([0])*np.pi/180
-phi_inc = np.array([0])*np.pi/180
-in_plane_wavevector = np.array([0.0, 0.0])
+lam_tgt = np.array([1.53,1.55,1.57])
 
-diff_order = np.array([
-    [0,4],
-    [0,5],
-    [0,6],
-])
-period = np.array([Nx * d_pixel, Ny * d_pixel])
-thickness = 0.7
+design_dim = np.array([2.5, 2.5])
+waveguide_width = 0.5
 
-mat_pattern = np.array(['Air','TiO2_Sarkar']) # Low RI, High RI
-mat_background = np.array(['Air','SiO2_bulk']) # background (incident side), background (exit side)
+dpix = design_dim[0]/Nx
+waveguide_width_npix = np.round(waveguide_width/dpix)
+if waveguide_width_npix < min_feature_size:
+    print('\t!!! Waveguide width smaller than the minimum feature size !!!', flush=True)
+    assert False
+if Ny % 2 == 0:
+    waveguide_width_npix += (waveguide_width_npix % 2)*np.sign(waveguide_width/dpix - waveguide_width_npix)
+else:
+    waveguide_width_npix += (waveguide_width_npix % 2 == 0)*np.sign(waveguide_width/dpix - waveguide_width_npix)
+waveguide_halfwidth_npix = int(np.floor(waveguide_width_npix/2 + 0.5))
+center_y = int(np.floor(Ny/2 + 0.5))
+
+waveguide_bottom_input = int(center_y - waveguide_halfwidth_npix)
+waveguide_top_input = int(waveguide_bottom_input + waveguide_width_npix)
+waveguide_bottom_outputTM0 = int(center_y + 2 * waveguide_width_npix - waveguide_halfwidth_npix)
+waveguide_top_outputTM0 = int(waveguide_bottom_outputTM0 + waveguide_width_npix)
+waveguide_bottom_outputTM1 = int(center_y - waveguide_halfwidth_npix)
+waveguide_top_outputTM1 = int(waveguide_bottom_outputTM1 + waveguide_width_npix)
+waveguide_bottom_outputTM2 = int(center_y - 2 * waveguide_width_npix - waveguide_halfwidth_npix)
+waveguide_top_outputTM2 = int(waveguide_bottom_outputTM2 + waveguide_width_npix)
+
+padding = -np.ones((Nx + 2*min_feature_size, Ny + 2*min_feature_size))
+padding[min_feature_size:-min_feature_size,min_feature_size:-min_feature_size] = 0
+
+padding[:min_feature_size,waveguide_bottom_input + min_feature_size:waveguide_top_input + min_feature_size] = 1
+padding[-min_feature_size:,waveguide_bottom_outputTM0 + min_feature_size:waveguide_top_outputTM0 + min_feature_size] = 1
+padding[-min_feature_size:,waveguide_bottom_outputTM1 + min_feature_size:waveguide_top_outputTM1 + min_feature_size] = 1
+padding[-min_feature_size:,waveguide_bottom_outputTM2 + min_feature_size:waveguide_top_outputTM2 + min_feature_size] = 1
+
+mat_padding = 'SiO2_bulk'
+mat_waveguide = 'Si_Schinke_Shkondin'
 
 cost_obj_high_fidelity = objfun.custom_objective(
+    lam_tgt, # in um
+    design_dim, # in um
     Nx,
     Ny,
-    period,
-    thickness,
-    lam,
-    in_plane_wavevector,
-    mat_background,
-    mat_pattern,
-    diff_order,
-    IPR_exponent=IPR_exponent,
-    incident_pol=incident_pol,
+    waveguide_width, # in um
+    mat_padding,
+    mat_waveguide,
+    padding,
+    min_feature_size,
+    IPR_exponent,
 )
 
 cost_obj_low_fidelity = objfun.custom_objective(
+    lam_tgt, # in um
+    design_dim, # in um
     Nx,
     Ny,
-    period,
-    thickness,
-    lam,
-    in_plane_wavevector,
-    mat_background,
-    mat_pattern,
-    diff_order,
-    IPR_exponent=IPR_exponent,
-    incident_pol=incident_pol,
+    waveguide_width, # in um
+    mat_padding,
+    mat_waveguide,
+    padding,
+    min_feature_size,
+    IPR_exponent,
 )
 
 # Optimizer Settings
@@ -108,20 +124,23 @@ cost_obj_low_fidelity = objfun.custom_objective(
 # high-fidelity: accuracy required for actual application
 # low-fidelity: faster and less accurate, but accurate enough to ensure high correlation with the high-fidelity simulations
 #--------------------------------------------------------------------------------------------------------------------------
-low_fidelity_setting = 20**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-high_fidelity_setting = 36**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-t_low_fidelity = 3.52 # low-fidelity simulation time in seconds
-t_high_fidelity = 36.1 # high-fidelity simulation time in seconds
+low_fidelity_setting = 1.0 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+if optimization_algorithm == 'TF_BFGS':
+    high_fidelity_setting = 1.0
+else:
+    high_fidelity_setting = 2.0 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+t_low_fidelity = 5.31 # low-fidelity simulation time in seconds
+t_high_fidelity = 34.3 # high-fidelity simulation time in seconds
 t_iteration = t_high_fidelity*Nensemble # target time per optimization iteration in seconds (actual time may be slightly longer due to the brush generator)
-t_fwd_AD = 48.3
+t_fwd_bwd = 99.5
 
 cost_obj_high_fidelity.set_accuracy(high_fidelity_setting)
 cost_obj_low_fidelity.set_accuracy(low_fidelity_setting)
 
 if optimization_algorithm == 'TF_BFGS':
-    Ntrial = int(np.round(Nensemble/(t_fwd_AD/t_high_fidelity)))
+    Ntrial = int(np.round(Nensemble/(t_fwd_bwd/t_high_fidelity)))
 
-    output_filename = 'RGB_coupler_IPR' + str(int(1/IPR_exponent)) + '_Ntrial' + str(Ntrial) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+    output_filename = 'WDM_IPR' + str(int(1/IPR_exponent)) + '_Ntrial' + str(Ntrial) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
     optimizer = TF_BFGS.optimizer(
@@ -143,32 +162,6 @@ if optimization_algorithm == 'TF_BFGS':
     T2 = time.time()
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
-elif optimization_algorithm == 'AF_STE':
-    Ntrial = int(np.round(Nensemble/(t_fwd_AD/t_high_fidelity)))
-    eta = args.eta
-
-    output_filename = 'RGB_coupler_IPR' + str(int(1/IPR_exponent)) + '_Ntrial' + str(Ntrial) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
-        + '_eta' + str(eta) + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
-
-    optimizer = AF_STE.optimizer(
-        Nx=Nx,
-        Ny=Ny,
-        Ntrial=Ntrial,
-        symmetry=symmetry,
-        periodic=periodic,
-        padding=padding,
-        high_fidelity_setting=high_fidelity_setting,
-        brush_size=min_feature_size,
-        upsample_ratio=upsample_ratio,
-        cost_obj=cost_obj_high_fidelity,
-        Nthreads=Nthreads,
-    )
-    
-    T1 = time.time()
-    optimizer.run(n_seed, output_filename, maxiter, eta_ADAM=eta, load_data=load_data)
-    T2 = time.time()
-    print('\n### Total time: ' + str(T2 - T1), flush=True)
-
 elif optimization_algorithm == 'GEGD':
     sigma_RBF = min_feature_size/2/np.sqrt(2)
     sigma_ensemble = args.sigma_ensemble # sampling standard deviation for the ensemble
@@ -177,8 +170,8 @@ elif optimization_algorithm == 'GEGD':
     coeff_exp = args.coeff_exp
     cost_threshold = 0.0
 
-    output_filename = 'RGB_coupler_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
-        + '_sig_ens' + str(sigma_ensemble) + '_eta' + str(eta) + '_mfs' + str(min_feature_size) + '_exp' + str(coeff_exp) + '_try' + str(n_seed+1)
+    output_filename = 'WDM_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+        + '_sig_ens' + str(sigma_ensemble) + '_eta' + str(eta) + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
     optimizer = GEGD.optimizer(
         Nx=Nx,
@@ -216,7 +209,7 @@ elif optimization_algorithm == 'AF_PSO':
     coeff_social = 1.49
     coeff_inertia = 0.9
 
-    output_filename = 'RGB_coupler_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+    output_filename = 'WDM_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
     optimizer = AF_PSO.optimizer(
@@ -242,7 +235,7 @@ elif optimization_algorithm == 'AF_PSO':
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
 elif optimization_algorithm == 'AF_GA':
-    output_filename = 'RGB_coupler_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+    output_filename = 'WDM_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
     optimizer = AF_GA.optimizer(
@@ -268,7 +261,7 @@ elif optimization_algorithm == 'AF_GA':
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
 elif optimization_algorithm == 'sep_CMA_ES':
-    output_filename = 'RGB_coupler_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+    output_filename = 'WDM_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
     optimizer = sep_CMA_ES.optimizer(
