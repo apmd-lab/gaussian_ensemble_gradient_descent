@@ -1,11 +1,11 @@
 import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
-sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
+#sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
+sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
 
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-import psutil
 import time
 import numpy as np
 import jax
@@ -20,16 +20,12 @@ class custom_objective:
         Ny,
         period,
         thickness_background,
-        thickness_capping_layer,
         thickness_pattern,
-        thickness_spacer,
         thickness_substrate,
         lam,
         in_plane_wavevector,
         mat_background,
-        mat_capping_layer,
         mat_pattern,
-        mat_spacer,
         mat_substrate,
         truncation=basis.Truncation.CIRCULAR,
         formulation=fmm.Formulation.JONES_DIRECT, #FFT, JONES_DIRECT, JONES, NORMAL, POL
@@ -39,26 +35,22 @@ class custom_objective:
 
         # Set Material Properties
         self.n_freq = lam.size
-        self.lam = jnp.asarray(lam)
-        self.freq = jnp.asarray(1/lam)
+        self.lam = jnp.asarray(lam, dtype=jnp.float32)
+        self.freq = jnp.asarray(1/lam, dtype=jnp.float32)
         
-        mat_type = list(set(np.hstack((mat_pattern, mat_background, mat_capping_layer, mat_spacer, mat_substrate))))
+        mat_type = list(set(np.hstack((mat_pattern, mat_background, mat_substrate))))
         raw_wavelength, mat_dict = rmd.load_all(1e3*lam, 'n_k', mat_type)
 
-        self.eps_incident_medium = jnp.asarray(mat_dict[mat_background[0]]**2)[:,jnp.newaxis,jnp.newaxis] # freq, x, y
-        self.eps_capping_layer = jnp.asarray(mat_dict[mat_capping_layer[0]]**2)[:,jnp.newaxis,jnp.newaxis]
-        self.eps_spacer = jnp.asarray(mat_dict[mat_spacer[0]]**2)[:,jnp.newaxis,jnp.newaxis]
-        self.eps_substrate = jnp.asarray(mat_dict[mat_substrate[0]]**2)[:,jnp.newaxis,jnp.newaxis]
-        self.RI_void = jnp.asarray(mat_dict[mat_pattern[0]])[:,jnp.newaxis,jnp.newaxis]
-        self.delta_RI = (jnp.asarray(mat_dict[mat_pattern[1]]) - jnp.asarray(mat_dict[mat_pattern[0]]))[:,jnp.newaxis,jnp.newaxis]
+        self.eps_incident_medium = jnp.asarray(mat_dict[mat_background[0]]**2, dtype=jnp.complex64)[:,jnp.newaxis,jnp.newaxis] # freq, x, y
+        self.eps_substrate = jnp.asarray(mat_dict[mat_substrate[0]]**2, dtype=jnp.complex64)[:,jnp.newaxis,jnp.newaxis]
+        self.RI_void = jnp.asarray(mat_dict[mat_pattern[0]], dtype=jnp.complex64)[:,jnp.newaxis,jnp.newaxis]
+        self.delta_RI = (jnp.asarray(mat_dict[mat_pattern[1]], dtype=jnp.complex64) - jnp.asarray(mat_dict[mat_pattern[0]], dtype=jnp.complex64))[:,jnp.newaxis,jnp.newaxis]
 
         # Set Simulation Geometry
         self.Nx = Nx
         self.Ny = Ny
         self.thickness_incident_medium = thickness_background
-        self.thickness_capping_layer = thickness_capping_layer
         self.thickness_pattern = thickness_pattern
-        self.thickness_spacer = thickness_spacer
         self.thickness_substrate = thickness_substrate
         self.period = period
         self.primitive_lattice_vectors = basis.LatticeVectors(
@@ -67,7 +59,7 @@ class custom_objective:
         )
 
         # Set Incidence Conditions
-        self.in_plane_wavevector = jnp.asarray(in_plane_wavevector)
+        self.in_plane_wavevector = jnp.asarray(in_plane_wavevector, dtype=jnp.float32)
 
         # Solver Parameters
         self.truncation = truncation
@@ -88,17 +80,13 @@ class custom_objective:
         density = jnp.zeros((self.Nx, self.Ny))
         permittivities = [
             self.eps_incident_medium,
-            self.eps_capping_layer,
             (self.delta_RI * density[jnp.newaxis,:,:] + self.RI_void)**2,
-            self.eps_spacer,
             self.eps_substrate,
         ]
 
         thicknesses = [
             self.thickness_incident_medium,
-            self.thickness_capping_layer,
             self.thickness_pattern,
-            self.thickness_spacer,
             self.thickness_substrate,
         ]
 
@@ -119,7 +107,7 @@ class custom_objective:
             layer_thicknesses=[jnp.asarray(t) for t in thicknesses],
         )
 
-        forward_amplitude_0_start = jnp.zeros((self.n_freq, 2 * self.basis_expansion.num_terms, 1), dtype=complex)
+        forward_amplitude_0_start = jnp.zeros((self.n_freq, 2 * self.basis_expansion.num_terms, 1), dtype=jnp.complex64)
         forward_amplitude_0_start = forward_amplitude_0_start.at[:,0,0].set(1 / jnp.sqrt(2))  # te
         forward_amplitude_0_start = forward_amplitude_0_start.at[:,self.basis_expansion.num_terms,0].set(1 / jnp.sqrt(2))  # tm
         backward_amplitude_N_end = jnp.zeros_like(forward_amplitude_0_start)
@@ -148,9 +136,9 @@ class custom_objective:
 
     def get_cost(self, x, get_grad=False):
         if x.ndim == 1:
-            density = jnp.asarray(x, dtype=float).reshape((self.Nx, self.Ny))
+            density = jnp.asarray(x, dtype=jnp.float32).reshape((self.Nx, self.Ny))
         else:
-            density = jnp.asarray(x, dtype=float)
+            density = jnp.asarray(x, dtype=jnp.float32)
 
         cost_fn, grad_fn = self.jit_get_flux_costs
 
@@ -186,16 +174,12 @@ class custom_objective:
         Ny = self.Ny
 
         eps_incident = self.eps_incident_medium
-        eps_capping_layer = self.eps_capping_layer
-        eps_spacer = self.eps_spacer
         eps_substrate = self.eps_substrate
         RI_void = self.RI_void
         delta_RI = self.delta_RI
 
         thickness_incident_medium = self.thickness_incident_medium
-        thickness_capping_layer = self.thickness_capping_layer
         thickness_pattern = self.thickness_pattern
-        thickness_spacer = self.thickness_spacer
         thickness_substrate = self.thickness_substrate
 
         lam = self.lam
@@ -211,17 +195,13 @@ class custom_objective:
         def _pure_cost_fn(density):
             permittivities = [
                 eps_incident,
-                eps_capping_layer,
                 (delta_RI * density[jnp.newaxis,:,:] + RI_void)**2,
-                eps_spacer,
                 eps_substrate,
             ]
     
             thicknesses = [
                 thickness_incident_medium,
-                thickness_capping_layer,
                 thickness_pattern,
-                thickness_spacer,
                 thickness_substrate,
             ]
     
@@ -242,7 +222,7 @@ class custom_objective:
                 layer_thicknesses=[jnp.asarray(t) for t in thicknesses],
             )
     
-            forward_amplitude_0_start = jnp.zeros((n_freq, 2 * expansion.num_terms, 1), dtype=complex)
+            forward_amplitude_0_start = jnp.zeros((n_freq, 2 * expansion.num_terms, 1), dtype=jnp.complex64)
             forward_amplitude_0_start = forward_amplitude_0_start.at[:,0,0].set(1 / jnp.sqrt(2))  # te
             forward_amplitude_0_start = forward_amplitude_0_start.at[:,expansion.num_terms,0].set(1 / jnp.sqrt(2))  # tm
             backward_amplitude_N_end = jnp.zeros_like(forward_amplitude_0_start)
@@ -296,23 +276,19 @@ class custom_objective:
     
     def get_detector_flux(self, x):
         if x.ndim == 1:
-            density = jnp.asarray(x, dtype=float).reshape((self.Nx, self.Ny))
+            density = jnp.asarray(x, dtype=jnp.float32).reshape((self.Nx, self.Ny))
         else:
-            density = jnp.asarray(x, dtype=float)
+            density = jnp.asarray(x, dtype=jnp.float32)
         
         permittivities = [
             self.eps_incident_medium,
-            self.eps_capping_layer,
             (self.delta_RI * density[jnp.newaxis,:,:] + self.RI_void)**2,
-            self.eps_spacer,
             self.eps_substrate,
         ]
 
         thicknesses = [
             self.thickness_incident_medium,
-            self.thickness_capping_layer,
             self.thickness_pattern,
-            self.thickness_spacer,
             self.thickness_substrate,
         ]
 
@@ -333,7 +309,7 @@ class custom_objective:
             layer_thicknesses=[jnp.asarray(t) for t in thicknesses],
         )
 
-        forward_amplitude_0_start = jnp.zeros((self.n_freq, 2 * self.basis_expansion.num_terms, 1), dtype=complex)
+        forward_amplitude_0_start = jnp.zeros((self.n_freq, 2 * self.basis_expansion.num_terms, 1), dtype=jnp.complex64)
         forward_amplitude_0_start = forward_amplitude_0_start.at[:,0,0].set(1 / jnp.sqrt(2))  # te
         forward_amplitude_0_start = forward_amplitude_0_start.at[:,self.basis_expansion.num_terms,0].set(1 / jnp.sqrt(2))  # tm
         backward_amplitude_N_end = jnp.zeros_like(forward_amplitude_0_start)

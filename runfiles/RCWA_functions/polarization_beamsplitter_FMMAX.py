@@ -1,11 +1,11 @@
 import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
-sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
+#sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
+sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
 
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-import psutil
 import time
 import numpy as np
 import jax
@@ -207,7 +207,7 @@ class custom_objective:
         self._jitted_cost_fn = jax.jit(_pure_cost_fn)
         self._jitted_grad_fn = jax.jit(jax.value_and_grad(_pure_cost_fn))
     
-    def get_diffraction_and_fields(self, x):
+    def get_diffraction_and_fields(self, x, upsampling_ratio):
         if x.ndim == 1:
             density = jnp.asarray(x, dtype=float).reshape((self.Nx, self.Ny))
         else:
@@ -270,13 +270,13 @@ class custom_objective:
         )
 
         # Compute the fields for a cross section at x = period[0] / 2
-        y = jnp.linspace(0, self.period[1], self.Ny + 1)
+        y = jnp.linspace(0, self.period[1], int(self.Ny / upsampling_ratio) + 1)
         x = jnp.ones_like(y) * self.period[0] / 2
         (Ex, Ey, Ez), (Hx, Hy, Hz), (x, y, z) = fields.stack_fields_3d_on_coordinates(
             amplitudes_interior=amplitudes_interior,
             layer_solve_results=layer_solve_results,
             layer_thicknesses=thicknesses,
-            layer_znum=[int(jnp.ceil(t / 0.01)) for t in thicknesses],
+            layer_znum=[int(jnp.ceil(t / 0.01)) + 1 for t in thicknesses],
             x=x,
             y=y,
         )

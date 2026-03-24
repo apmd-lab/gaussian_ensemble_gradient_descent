@@ -1,14 +1,18 @@
 import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
-sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
+#sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
+sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
+
+cuda_ind = 1
+os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 import numpy as np
-import torch
 from gegd.optimizer import TF_BFGS, AF_STE, GEGD, AF_PSO, AF_GA, sep_CMA_ES
 from itertools import product
 import time
-import util.read_mat_data as rmd
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -64,13 +68,11 @@ in_plane_wavevector = np.array([0.0, 0.0])
 
 period = np.array([Nx * d_pixel, Ny * d_pixel])
 thickness_background = 1.0
-thickness_capping_layer = 0.0
 thickness_pattern = 0.7
 thickness_spacer = 2.0
 thickness_substrate = 1.0
 
 mat_background = np.array(['Air']) # background (incident side)
-mat_capping_layer = np.array(['SiO2_bulk'])
 mat_pattern = np.array(['SiO2_bulk','Si3N4_Luke']) # Low RI, High RI
 mat_spacer = np.array(['SiO2_bulk'])
 mat_substrate = np.array(['Si_Schinke_Shkondin'])
@@ -80,14 +82,12 @@ cost_obj_high_fidelity = objfun.custom_objective(
     Ny,
     period,
     thickness_background,
-    thickness_capping_layer,
     thickness_pattern,
     thickness_spacer,
     thickness_substrate,
     lam,
     in_plane_wavevector,
     mat_background,
-    mat_capping_layer,
     mat_pattern,
     mat_spacer,
     mat_substrate,
@@ -100,14 +100,12 @@ cost_obj_low_fidelity = objfun.custom_objective(
     Ny,
     period,
     thickness_background,
-    thickness_capping_layer,
     thickness_pattern,
     thickness_spacer,
     thickness_substrate,
     lam,
     in_plane_wavevector,
     mat_background,
-    mat_capping_layer,
     mat_pattern,
     mat_spacer,
     mat_substrate,
@@ -120,12 +118,12 @@ cost_obj_low_fidelity = objfun.custom_objective(
 # high-fidelity: accuracy required for actual application
 # low-fidelity: faster and less accurate, but accurate enough to ensure high correlation with the high-fidelity simulations
 #--------------------------------------------------------------------------------------------------------------------------
-low_fidelity_setting = 28**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-high_fidelity_setting = 40**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-t_low_fidelity = 16.0 # low-fidelity simulation time in seconds
-t_high_fidelity = 79.7 # high-fidelity simulation time in seconds
+low_fidelity_setting = 27**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+high_fidelity_setting = 41**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+t_low_fidelity = 1.33 # low-fidelity simulation time in seconds
+t_high_fidelity = 5.54 # high-fidelity simulation time in seconds
 t_iteration = t_high_fidelity*Nensemble # target time per optimization iteration in seconds (actual time may be slightly longer due to the brush generator)
-t_fwd_AD = 136.1
+t_fwd_AD = 6.88
 
 cost_obj_high_fidelity.set_accuracy(high_fidelity_setting)
 cost_obj_low_fidelity.set_accuracy(low_fidelity_setting)

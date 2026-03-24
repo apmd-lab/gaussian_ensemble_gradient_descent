@@ -109,7 +109,18 @@ class optimizer:
         _, jac_temp = self.cost_obj.get_cost(x_fp, get_grad=True)
             
         jac_sym = jac_temp.reshape(self.Nx, self.Ny)
-        jac = dtf.backprop_filter_and_project(jac_sym, x0, self.symmetry, self.periodic, self.Nx, self.Ny, self.min_feature_size, self.sigma_filter, self.beta, padding=self.padding)
+        jac = dtf.backprop_filter_and_project(
+            jac_sym,
+            x0,
+            self.symmetry,
+            self.periodic,
+            self.Nx,
+            self.Ny,
+            self.min_feature_size,
+            self.sigma_filter,
+            self.beta,
+            padding=self.padding
+        )
         t2 = time.time()
         
         return jac
@@ -134,7 +145,7 @@ class optimizer:
         self.output_filename = output_filename
         self.maxiter = maxiter
         self.n_beta = n_beta
-        self.sigma_filter = self.min_feature_size / 2
+        self.sigma_filter = self.min_feature_size
 
         if load_data:
             data_file1 = output_filename + "_TF_results.npz"

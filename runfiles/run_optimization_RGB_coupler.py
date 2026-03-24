@@ -1,14 +1,8 @@
 import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
-sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
-
-import numpy as np
-import torch
-from gegd.optimizer import TF_BFGS, AF_STE, GEGD, AF_PSO, AF_GA, sep_CMA_ES
-from itertools import product
-import time
-import util.read_mat_data as rmd
+#sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
+sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -26,7 +20,19 @@ parser.add_argument('--maxiter', type=int, default=100)
 parser.add_argument('--sigma_ensemble', type=float, default=0.01)
 parser.add_argument('--eta', type=float, default=1)
 parser.add_argument('--min_feature_size', type=int, default=7)
+parser.add_argument('--cuda_ind', type=int, default=0)
 args = parser.parse_args()
+
+cuda_ind = args.cuda_ind
+os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+#os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.5"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+
+import numpy as np
+from gegd.optimizer import TF_BFGS, AF_STE, GEGD, AF_PSO, AF_GA, sep_CMA_ES
+from itertools import product
+import time
 
 optimization_algorithm = args.optimizer
 Nthreads = args.Nthreads
@@ -108,12 +114,12 @@ cost_obj_low_fidelity = objfun.custom_objective(
 # high-fidelity: accuracy required for actual application
 # low-fidelity: faster and less accurate, but accurate enough to ensure high correlation with the high-fidelity simulations
 #--------------------------------------------------------------------------------------------------------------------------
-low_fidelity_setting = 20**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-high_fidelity_setting = 36**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-t_low_fidelity = 3.52 # low-fidelity simulation time in seconds
-t_high_fidelity = 36.1 # high-fidelity simulation time in seconds
+low_fidelity_setting = 24**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+high_fidelity_setting = 50**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+t_low_fidelity = 0.85 # low-fidelity simulation time in seconds
+t_high_fidelity = 10.8 # high-fidelity simulation time in seconds
 t_iteration = t_high_fidelity*Nensemble # target time per optimization iteration in seconds (actual time may be slightly longer due to the brush generator)
-t_fwd_AD = 48.3
+t_fwd_AD = 13.0
 
 cost_obj_high_fidelity.set_accuracy(high_fidelity_setting)
 cost_obj_low_fidelity.set_accuracy(low_fidelity_setting)

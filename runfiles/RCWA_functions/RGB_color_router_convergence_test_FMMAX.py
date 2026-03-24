@@ -1,14 +1,19 @@
 import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
-sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
+#sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
+sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
+
+Nthreads = 8
+cuda_ind = 0
+os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 import numpy as np
 import jax
 import time
 import gegd.parameter_processing.density_transforms as dtf
-
-Nthreads = 16
 
 # Geometry
 Nx = 100
@@ -17,7 +22,7 @@ symmetry = 3 # Currently supported: (None), (D1,2,4)
 periodic = 1
 padding = None
 min_feature_size = 7 # minimum feature size in pixels
-d_pixel = 0.02 # pixel side length (nm)
+d_pixel = 0.01 # pixel side length (nm)
 feasible_design_generation_method = 'brush' # brush / two_phase_projection
 
 if symmetry == 0:
@@ -50,15 +55,11 @@ in_plane_wavevector = np.array([0.0, 0.0])
 
 period = np.array([Nx * d_pixel, Ny * d_pixel])
 thickness_background = 1.0
-thickness_capping_layer = 0.0
 thickness_pattern = 0.7
-thickness_spacer = 1.0
 thickness_substrate = 1.0
 
 mat_background = np.array(['Air']) # background (incident side)
-mat_capping_layer = np.array(['Air'])
-mat_pattern = np.array(['Air','Si3N4_Luke']) # Low RI, High RI
-mat_spacer = np.array(['Air'])
+mat_pattern = np.array(['SiO2_bulk','Si3N4_Luke']) # Low RI, High RI
 mat_substrate = np.array(['Si_Schinke_Shkondin'])
 
 cost_obj = objfun.custom_objective(
@@ -66,16 +67,12 @@ cost_obj = objfun.custom_objective(
     Ny,
     period,
     thickness_background,
-    thickness_capping_layer,
     thickness_pattern,
-    thickness_spacer,
     thickness_substrate,
     lam,
     in_plane_wavevector,
     mat_background,
-    mat_capping_layer,
     mat_pattern,
-    mat_spacer,
     mat_substrate,
     IPR_exponent=1/1,
 )
@@ -106,7 +103,7 @@ brush_time = t2 - t1
 
 load_data = False
 
-n_harmonic = np.arange(2, 46)**2
+n_harmonic = np.arange(2, 51)**2
 
 if load_data:
     with np.load("RGB_color_router_convergence_test_FMMAX_JONES_DIRECT_Nx" + str(Nx) + "_Ny" + str(Ny) + "_mfs" + str(min_feature_size) + ".npz") as data:

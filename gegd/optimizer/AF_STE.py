@@ -15,7 +15,7 @@ class optimizer:
                  periodic,
                  padding,
                  high_fidelity_setting,
-                 brush_size,
+                 min_feature_size,
                  upsample_ratio=1,
                  beta_proj=8,
                  brush_shape='circle',
@@ -30,7 +30,7 @@ class optimizer:
         self.periodic = periodic
         self.padding = padding
         self.beta_proj = beta_proj
-        self.brush_size = brush_size
+        self.min_feature_size = min_feature_size
         self.brush_shape = brush_shape
         self.high_fidelity_setting = high_fidelity_setting
         self.cost_obj = cost_obj
@@ -57,7 +57,7 @@ class optimizer:
             self.periodic,
             self.Nx,
             self.Ny,
-            self.brush_size,
+            self.min_feature_size,
             self.brush_shape,
             self.beta_proj,
             self.sigma_filter,
@@ -73,7 +73,18 @@ class optimizer:
         for n in range(self.Ntrial):
             f0[n], jac_temp = self.cost_obj.get_cost(x_bin[n,:], get_grad=True)
             jac_sym = jac_temp.reshape(self.Nx, self.Ny)
-            jac_STE[n,:] = dtf.backprop_filter_and_project(jac_sym, x0[n,:], self.symmetry, self.periodic, self.Nx, self.Ny, self.brush_size, self.sigma_filter, self.beta_proj, padding=self.padding)
+            jac_STE[n,:] = dtf.backprop_filter_and_project(
+                jac_sym,
+                x0[n,:],
+                self.symmetry,
+                self.periodic,
+                self.Nx,
+                self.Ny,
+                self.min_feature_size,
+                self.sigma_filter,
+                self.beta_proj,
+                padding=self.padding
+            )
         
         return f0, jac_STE, x_bin
     
@@ -164,7 +175,7 @@ class optimizer:
             print('### Brush Optimization (seed = ' + str(n_seed) + ')\n', flush=True)
     
         self.output_filename = output_filename
-        self.sigma_filter = self.brush_size/2/np.sqrt(2)
+        self.sigma_filter = self.min_feature_size/2/np.sqrt(2)
 
         lb = -np.ones(self.Ndim)
         ub = np.ones(self.Ndim)

@@ -1,14 +1,19 @@
 import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
-sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
+#sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
+sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
+
+Nthreads = 8
+cuda_ind = 0
+os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 import numpy as np
 import jax
 import time
 import gegd.parameter_processing.density_transforms as dtf
-
-Nthreads = 8
 
 # Geometry
 Nx = 45

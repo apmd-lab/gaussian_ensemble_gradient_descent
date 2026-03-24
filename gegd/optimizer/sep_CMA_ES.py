@@ -121,10 +121,10 @@ class optimizer:
         p_c = torch.tensor(p_c, dtype=torch.float64, device=self.device) if p_c is not None else torch.zeros(self.Ndim, dtype=torch.float64, device=self.device)
         p_sigma = torch.tensor(p_sigma, dtype=torch.float64, device=self.device) if p_sigma is not None else torch.zeros(self.Ndim, dtype=torch.float64, device=self.device)
         B = torch.eye(self.Ndim, dtype=torch.float64, device=self.device)
-        D = torch.diag(D, dtype=torch.float64, device=self.device) if D is not None else torch.eye(self.Ndim, dtype=torch.float64, device=self.device)
+        D = torch.diag(torch.tensor(D, dtype=torch.float64, device=self.device)) if D is not None else torch.eye(self.Ndim, dtype=torch.float64, device=self.device)
         xmean = torch.tensor(xmean, dtype=torch.float64, device=self.device) if xmean is not None else torch.zeros(self.Ndim, dtype=torch.float64, device=self.device)
         sigma = torch.tensor(sigma, dtype=torch.float64, device=self.device) if sigma is not None else torch.tensor(0.1, dtype=torch.float64, device=self.device)
-        Cov = torch.diag(Cov, dtype=torch.float64, device=self.device) if Cov is not None else torch.eye(self.Ndim, dtype=torch.float64, device=self.device)
+        Cov = torch.diag(torch.tensor(Cov, dtype=torch.float64, device=self.device)) if Cov is not None else torch.eye(self.Ndim, dtype=torch.float64, device=self.device)
         chi_N = self.Ndim**0.5 * (1 - 1 / (4 * self.Ndim) + 1 / (21 * self.Ndim**2))
 
         while True:

@@ -1,11 +1,11 @@
 import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
-sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
+#sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
+sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
 
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-import psutil
 import time
 import numpy as np
 import jax
