@@ -66,8 +66,6 @@ class optimizer:
         )
 
         # Sample Modified Cost Function --------------------------------------------------------------
-        self.cost_obj.set_accuracy(self.high_fidelity_setting)
-
         f0 = np.zeros(self.Ntrial)
         jac_STE = np.zeros((self.Ntrial, self.Ndim))
         for n in range(self.Ntrial):

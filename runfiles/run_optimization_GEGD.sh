@@ -73,7 +73,7 @@ END_COMMENT
 ## RGB Color Router -----------------------------------------------------
 ##: << 'END_COMMENT'
 python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_RGB_color_router.py \
-    --Nthreads 16 \
+    --Nthreads 8 \
     --n_seed 0 \
     --load_data 0 \
     --optimizer 'GEGD' \

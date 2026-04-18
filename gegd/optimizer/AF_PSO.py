@@ -76,8 +76,6 @@ class optimizer:
             )
 
         # Sample Modified Cost Function --------------------------------------------------------------
-        self.cost_obj.set_accuracy(self.high_fidelity_setting)
-        
         f_swarm = np.zeros(self.Nswarm)
         for n in range(self.Nswarm):
             f_swarm[n] = self.cost_obj.get_cost(x_bin[n,:], get_grad=False)

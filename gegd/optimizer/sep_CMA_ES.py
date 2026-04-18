@@ -85,8 +85,6 @@ class optimizer:
             )
 
         # Sample Modified Cost Function --------------------------------------------------------------
-        self.cost_obj.set_accuracy(self.high_fidelity_setting)
-        
         f_batch = np.zeros(self.Nsample)
         for n in range(self.Nsample):
             f_batch[n] = self.cost_obj.get_cost(x_bin[n,:], get_grad=False)

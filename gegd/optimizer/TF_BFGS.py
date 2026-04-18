@@ -38,8 +38,6 @@ class optimizer:
         self.Nthreads = Nthreads
         self.cuda_ind = cuda_ind
         
-        self.cost_obj.set_accuracy(self.high_fidelity_setting)
-        
         # Get Number of Independent Parameters
         if symmetry == 0:
             self.Ndim = Nx*Ny

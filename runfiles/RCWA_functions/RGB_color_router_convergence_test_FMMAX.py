@@ -5,7 +5,7 @@ import sys
 sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
 
 Nthreads = 8
-cuda_ind = 0
+cuda_ind = 1
 os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
@@ -103,7 +103,7 @@ brush_time = t2 - t1
 
 load_data = False
 
-n_harmonic = np.arange(2, 51)**2
+n_harmonic = np.arange(2, 47)**2
 
 if load_data:
     with np.load("RGB_color_router_convergence_test_FMMAX_JONES_DIRECT_Nx" + str(Nx) + "_Ny" + str(Ny) + "_mfs" + str(min_feature_size) + ".npz") as data:
