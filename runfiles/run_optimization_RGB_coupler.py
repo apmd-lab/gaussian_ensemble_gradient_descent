@@ -165,12 +165,12 @@ elif optimization_algorithm == 'AF_STE':
         periodic=periodic,
         padding=padding,
         high_fidelity_setting=high_fidelity_setting,
-        brush_size=min_feature_size,
+        min_feature_size=min_feature_size,
         upsample_ratio=upsample_ratio,
         cost_obj=cost_obj_high_fidelity,
         Nthreads=Nthreads,
     )
-    
+
     T1 = time.time()
     optimizer.run(n_seed, output_filename, maxiter, eta_ADAM=eta, load_data=load_data)
     T2 = time.time()
