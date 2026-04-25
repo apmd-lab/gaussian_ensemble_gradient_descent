@@ -1,18 +1,18 @@
 #!/bin/bash
 
-#SBATCH -o /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/slurm/run_optimization.log-%j
-#SBATCH --partition=48core
-#SBATCH --nodelist=node2
+#SBATCH -o slurm/run_optimization.log-%j
+#SBATCH --partition=GPU-shared
 #SBATCH --job-name=ens_opt
 ##SBATCH --exclusive
-
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=5
+#SBATCH --gres=gpu:v100-32:1
+#SBATCH --time=48:00:00
 
-export OMP_NUM_THREADS=16
-export OPENBLAS_NUM_THREADS=16
-export MKL_NUM_THREADS=16
-export NUMEXPR_NUM_THREADS=16
+export OMP_NUM_THREADS=5
+export OPENBLAS_NUM_THREADS=5
+export MKL_NUM_THREADS=5
+export NUMEXPR_NUM_THREADS=5
 
 ## Test Function RBF -----------------------------------------------------
 
@@ -83,7 +83,7 @@ python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimiz
     --symmetry 3 \
     --upsample_ratio 1 \
     --coeff_exp 20 \
-    --maxiter 300 \
+    --maxiter 500 \
     --sigma_ensemble 1e-2 \
     --eta 5e-5 \
     --min_feature_size 7

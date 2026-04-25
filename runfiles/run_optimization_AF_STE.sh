@@ -1,22 +1,26 @@
 #!/bin/bash
 
-#SBATCH -o /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/slurm/run_optimization.log-%j
-#SBATCH --partition=48core
-#SBATCH --nodelist=node1
+#SBATCH -o slurm/run_optimization.log-%j
+#SBATCH --partition=GPU-shared
 #SBATCH --job-name=ens_opt
 ##SBATCH --exclusive
-
-export OMP_NUM_THREADS=8
-export OPENBLAS_NUM_THREADS=8
-export MKL_NUM_THREADS=8
-export NUMEXPR_NUM_THREADS=8
-
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=5
+#SBATCH --gres=gpu:v100-32:1
+#SBATCH --time=48:00:00
+
+export OMP_NUM_THREADS=5
+export OPENBLAS_NUM_THREADS=5
+export MKL_NUM_THREADS=5
+export NUMEXPR_NUM_THREADS=5
+
+module load anaconda3
+source activate gegd_dev
+module load cuda/12.6
 
 ## Test Function RBF -----------------------------------------------------
 
-##python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py \
+##python run_optimization_test_functions.py \
 ##    --Nthreads 10 \
 ##    --n_seed 0 \
 ##    --load_data 0 \
@@ -30,8 +34,8 @@ export NUMEXPR_NUM_THREADS=8
 ##    --min_feature_size 9
 
 ## Polarization Beamsplitter -----------------------------------------------------
-##: << 'END_COMMENT'
-python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_polarization_beamsplitter.py \
+: << 'END_COMMENT'
+python run_optimization_polarization_beamsplitter.py \
     --Nthreads 8 \
     --n_seed 0 \
     --load_data 0 \
@@ -44,21 +48,21 @@ python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimiz
     --maxiter 300 \
     --min_feature_size 7 \
     --eta 0.01
-##END_COMMENT
+END_COMMENT
 
 ## RGB Coupler -----------------------------------------------------
-: << 'END_COMMENT'
-python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_RGB_coupler.py \
-    --Nthreads 8 \
-    --n_seed 0 \
-    --load_data 0 \
+##: << 'END_COMMENT'
+python run_optimization_RGB_coupler.py \
+    --Nthreads 5 \
+    --n_seed 6 \
+    --load_data 1 \
     --optimizer 'AF_STE' \
     --Nensemble 20 \
     --Nx 60 \
     --Ny 263 \
     --symmetry 1 \
     --upsample_ratio 1 \
-    --maxiter 300 \
+    --maxiter 400 \
     --min_feature_size 7 \
     --eta 0.01
-END_COMMENT
+##END_COMMENT
