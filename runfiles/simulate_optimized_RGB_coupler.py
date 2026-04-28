@@ -2,8 +2,8 @@ import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
-#sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
-sys.path.append('/ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent/runfiles')
+sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
+#sys.path.append('/ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent/runfiles')
 
 import numpy as np
 from scipy.ndimage import gaussian_filter, zoom
@@ -12,11 +12,8 @@ import time
 Nthreads = 8
 cuda_ind = 0
 os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-
-import jax
-jax.config.update("jax_enable_x64", True)
+#os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+#os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 # Geometry
 Nx = 60
@@ -115,6 +112,24 @@ T_tgt, E_in_plane, x_grid, y_grid, z_grid, transmitted_power, incident_power = c
 x_up = np.where(gaussian_filter(zoom(x.astype(np.float64), upsampling_ratio, order=1, mode='wrap'), sigma=upsampling_ratio, mode='wrap') > 0.5, 1, 0)
 T_tgt_up, E_in_plane_up, x_grid_up, y_grid_up, z_grid_up, transmitted_power_up, incident_power_up = cost_obj_upsampled.get_diffraction_and_fields(x_up, upsampling_ratio)
 
+print('\n\t*GEGD (ADAM only)', end='', flush=True)
+cost_all_GEGD_ADAM = np.zeros(10)
+for i in range(10):
+    with np.load(directory + "/RCWA_functions/RGB_coupler/GEGD_ADAM_only/RGB_coupler_IPR1_Nensemble20_Ndim60x263_D1_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(i + 1) + "_GEGD_results.npz") as data:
+        cost_all_GEGD_ADAM[i] = data['best_cost_hist'][-1]
+
+idx_best = np.argmin(cost_all_GEGD_ADAM)
+print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GEGD_ADAM[idx_best], flush=True)
+
+print('\n\t*GEGD (preconditioned)', end='', flush=True)
+cost_all_GEGD_pre = np.zeros(10)
+for i in range(10):
+    with np.load(directory + "/RCWA_functions/RGB_coupler/GEGD_preconditioned/RGB_coupler_IPR1_Nensemble20_Ndim60x263_D1_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(i + 1) + "_GEGD_results.npz") as data:
+        cost_all_GEGD_pre[i] = data['best_cost_hist'][-1]
+
+idx_best = np.argmin(cost_all_GEGD_pre)
+print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GEGD_pre[idx_best], flush=True)
+
 print('\n\t*BFGS', end='', flush=True)
 cost_all_BFGS = np.zeros(180)
 cost_all_BFGS_mfs = np.zeros(180)
@@ -156,6 +171,8 @@ print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_AF_STE[idx_best], flush=T
 
 np.savez(directory + '/RCWA_functions/RGB_coupler/RGB_coupler_IPR1_Nensemble20_Ndim60x263_D1_mfs7_simulations',
     cost_all_GEGD=cost_all_GEGD,
+    cost_all_GEGD_ADAM=cost_all_GEGD_ADAM,
+    cost_all_GEGD_pre=cost_all_GEGD_pre,
     cost_all_BFGS=cost_all_BFGS,
     cost_all_BFGS_mfs=cost_all_BFGS_mfs,
     cost_all_sep_CMA_ES=cost_all_sep_CMA_ES,

@@ -104,6 +104,24 @@ T_TE, T_TM, Ex, Ey, x_grid, y_grid, z_grid, transmitted_power, incident_power, c
 x_up = np.where(gaussian_filter(zoom(x.astype(np.float64), upsampling_ratio, order=1, mode='wrap'), sigma=upsampling_ratio, mode='wrap') > 0.5, 1, 0)
 T_TE_up, T_TM_up, Ex_up, Ey_up, x_grid_up, y_grid_up, z_grid_up, transmitted_power_up, incident_power_up, coeffs_up, idx_tgt_up = cost_obj_upsampled.get_diffraction_and_fields(x_up, upsampling_ratio)
 
+print('\n\t*GEGD (ADAM only)', end='', flush=True)
+cost_all_GEGD_ADAM = np.zeros(10)
+for i in range(10):
+    with np.load(directory + "/RCWA_functions/polarization_beamsplitter/GEGD_ADAM_only/polarization_beamsplitter_IPR1_Nensemble20_Ndim45x90_D1_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(i + 1) + "_GEGD_results.npz") as data:
+        cost_all_GEGD_ADAM[i] = data['best_cost_hist'][-1]
+
+idx_best = np.argmin(cost_all_GEGD_ADAM)
+print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GEGD_ADAM[idx_best], flush=True)
+
+print('\n\t*GEGD (preconditioned)', end='', flush=True)
+cost_all_GEGD_pre = np.zeros(10)
+for i in range(10):
+    with np.load(directory + "/RCWA_functions/polarization_beamsplitter/GEGD_preconditioned/polarization_beamsplitter_IPR1_Nensemble20_Ndim45x90_D1_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(i + 1) + "_GEGD_results.npz") as data:
+        cost_all_GEGD_pre[i] = data['best_cost_hist'][-1]
+
+idx_best = np.argmin(cost_all_GEGD_pre)
+print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GEGD_pre[idx_best], flush=True)
+
 print('\n\t*BFGS', end='', flush=True)
 cost_all_BFGS = np.zeros(180)
 cost_all_BFGS_mfs = np.zeros(180)
@@ -145,6 +163,8 @@ print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_AF_STE[idx_best], flush=T
 
 np.savez(directory + '/RCWA_functions/polarization_beamsplitter/polarization_beamsplitter_IPR1_Nensemble20_Ndim45x90_D1_mfs7_simulations',
     cost_all_GEGD=cost_all_GEGD,
+    cost_all_GEGD_ADAM=cost_all_GEGD_ADAM,
+    cost_all_GEGD_pre=cost_all_GEGD_pre,
     cost_all_BFGS=cost_all_BFGS,
     cost_all_BFGS_mfs=cost_all_BFGS_mfs,
     cost_all_sep_CMA_ES=cost_all_sep_CMA_ES,

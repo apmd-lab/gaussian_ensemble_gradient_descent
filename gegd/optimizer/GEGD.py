@@ -33,6 +33,7 @@ class optimizer:
                  cost_threshold=0,
                  cost_obj_high_fidelity=None,
                  cost_obj_low_fidelity=None,
+                 use_ctrlVar=True,
                  Nthreads=1,
                  cuda_ind=0,
                  verbosity=1,
@@ -61,6 +62,7 @@ class optimizer:
         self.cost_threshold = cost_threshold
         self.cost_obj_high_fidelity = cost_obj_high_fidelity
         self.cost_obj_low_fidelity = cost_obj_low_fidelity
+        self.use_ctrlVar = use_ctrlVar
         self.Nthreads = Nthreads
         self.cuda_ind = cuda_ind
         self.device = 'cuda:' + str(cuda_ind) if torch.cuda.is_available() else 'cpu'
@@ -275,20 +277,21 @@ class optimizer:
         mu = torch.tensor(mu, dtype=torch.float64, device=self.device)
         sigma = torch.tensor(sigma, dtype=torch.float64, device=self.device)
         dx = torch.tensor(dx, dtype=torch.float64, device=self.device)
-        cov_g = torch.tensor(self.cov_g, dtype=torch.float64, device=self.device)
         cov_inv = torch.tensor(cov_inv, dtype=torch.float64, device=self.device)
         p = torch.tensor(p, dtype=torch.float64, device=self.device)
         
         mu = mu.unsqueeze(0).unsqueeze(-1) # (1, Ndim, 1)
         sigma = sigma.unsqueeze(0).unsqueeze(-1) # (1, Ndim, 1)
         dx = dx.unsqueeze(-1) # (Nsample, Ndim, 1)
-        cov_g = cov_g.unsqueeze(0) # (1, Ndim, Ndim)
         cov_inv = cov_inv.unsqueeze(0) # (1, Ndim, Ndim)
         p = p.unsqueeze(-1).unsqueeze(-1) # (Nsample, 1, 1)
 
         grad_mean = (cov_inv @ dx) * p
 
         if self.covariance_type == 'gaussian_adaptive':
+            cov_g = torch.tensor(self.cov_g, dtype=torch.float64, device=self.device)
+            cov_g = cov_g.unsqueeze(0) # (1, Ndim, Ndim)
+
             z = cov_inv @ dx # (Nsample, Ndim, 1)
             sigma_diag = torch.exp(-mu**2 / (2 * sigma**2)) # (1, Ndim, 1)
             B = cov_g*sigma_diag # (1, Ndim, Ndim)
@@ -307,7 +310,7 @@ class optimizer:
     def sigma_derivative(self, dx, sigma, cov_inv, p):
         dx = torch.tensor(dx, dtype=torch.float64, device=self.device)
         sigma = torch.tensor(sigma, dtype=torch.float64, device=self.device)
-        cov_g = torch.tensor(self.cov_g, dtype=torch.float64, device=self.device)
+        
         cov_inv = torch.tensor(cov_inv, dtype=torch.float64, device=self.device)
         p = torch.tensor(p, dtype=torch.float64, device=self.device)
 
@@ -315,7 +318,6 @@ class optimizer:
         dxT = torch.transpose(dx, 1, 2) # (Nsample, 1, Ndim)
         sigma = sigma.unsqueeze(0).unsqueeze(-1) # (1, Ndim, 1)
         sigmaT = torch.transpose(sigma, 1, 2) # (1, 1, Ndim)
-        cov_g = cov_g.unsqueeze(0) # (1, Ndim, Ndim)
         cov_inv = cov_inv.unsqueeze(0) # (1, Ndim, Ndim)
         p = p.unsqueeze(-1).unsqueeze(-1) # (Nsample, 1, 1)
 
@@ -329,6 +331,9 @@ class optimizer:
             grad = (1/sigma)*(dxT @ cov_inv @ dx - self.Ndim)*p
         
         elif self.covariance_type == 'gaussian_diagonal':
+            cov_g = torch.tensor(self.cov_g, dtype=torch.float64, device=self.device)
+            cov_g = cov_g.unsqueeze(0) # (1, Ndim, Ndim)
+
             z = cov_inv @ dx # (Nsample, Ndim, 1)
             B = cov_g*sigma # (1, Ndim, Ndim)
             Bz = B @ z # (Nsample, Ndim, 1)
@@ -460,7 +465,10 @@ class optimizer:
         f_ctrl_logDeriv_all = np.zeros((self.r_CV*self.Nensemble, self.Ndim+self.Nsigma))
         for n in range(self.r_CV*self.Nensemble):
             #t1 = time.time()
-            f_temp = self.cost_obj_low_fidelity.get_cost(x_sample[n,:], False)
+            if self.r_CV == 1:
+                f_temp = np.random.rand()
+            else:
+                f_temp = self.cost_obj_low_fidelity.get_cost(x_sample[n,:], False)
             #t2 = time.time()
             #print('time: ' + str(t2 - t1), flush=True)
             f_shifted = (f_temp - self.cost_threshold)/(self.cost_threshold + 1)
@@ -602,8 +610,12 @@ class optimizer:
             var_reduction[r_CV>0] = (1 - ((r_CV[r_CV>0] - 1)/r_CV[r_CV>0])*corr_mean**2)/N[r_CV>0]
             var_reduction[r_CV<=0] = 1/N[r_CV<=0]
             ind_opt = np.nanargmin(var_reduction)
-            self.Nensemble = N[ind_opt]
-            self.r_CV = r_CV[ind_opt]
+            if self.use_ctrlVar:
+                self.Nensemble = N[ind_opt]
+                self.r_CV = r_CV[ind_opt]
+            else:
+                self.Nensemble = int(np.floor(self.t_iteration/self.t_high_fidelity))
+                self.r_CV = 1
             
             var_reduction = (1 - ((self.r_CV - 1)/self.r_CV)*corr_mean**2)/self.Nensemble
             
@@ -858,7 +870,7 @@ class optimizer:
             self.cost_ensemble_ctrl_sigma_hist = np.zeros(0)
             if self.Nsigma == 1:
                 self.sigma_hist = np.zeros(0)
-                if self.covariance_type == 'gaussian_constant':
+                if self.covariance_type == 'gaussian_constant' or self.covariance_type == 'constant':
                     self.sigma_fp_hist = np.zeros(0)
                 elif self.covariance_type == 'gaussian_adaptive':
                     self.sigma_fp_hist = None

@@ -49,9 +49,9 @@ python run_optimization_polarization_beamsplitter.py \
     --symmetry 1 \
     --upsample_ratio 1 \
     --coeff_exp 20 \
-    --maxiter 300 \
+    --maxiter 400 \
     --sigma_ensemble 1e-2 \
-    --eta 1e-4 \
+    --eta 5e-5 \
     --min_feature_size 7
 END_COMMENT
 
