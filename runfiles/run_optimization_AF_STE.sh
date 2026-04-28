@@ -54,7 +54,7 @@ END_COMMENT
 ##: << 'END_COMMENT'
 python run_optimization_RGB_coupler.py \
     --Nthreads 5 \
-    --n_seed 6 \
+    --n_seed 9 \
     --load_data 1 \
     --optimizer 'AF_STE' \
     --Nensemble 20 \

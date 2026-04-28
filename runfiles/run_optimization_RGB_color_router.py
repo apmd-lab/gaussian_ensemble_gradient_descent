@@ -2,17 +2,8 @@ import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
-sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
-
-cuda_ind = 1
-os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-
-import numpy as np
-from gegd.optimizer import TF_BFGS, AF_STE, GEGD, AF_PSO, AF_GA, sep_CMA_ES
-from itertools import product
-import time
+#sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
+sys.path.append('/ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent')
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -30,7 +21,18 @@ parser.add_argument('--maxiter', type=int, default=100)
 parser.add_argument('--sigma_ensemble', type=float, default=0.01)
 parser.add_argument('--eta', type=float, default=1)
 parser.add_argument('--min_feature_size', type=int, default=7)
+parser.add_argument('--cuda_ind', type=int, default=0)
 args = parser.parse_args()
+
+cuda_ind = args.cuda_ind
+os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
+#os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+#os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+
+import numpy as np
+from gegd.optimizer import TF_BFGS, AF_STE, GEGD, AF_PSO, AF_GA, sep_CMA_ES
+from itertools import product
+import time
 
 optimization_algorithm = args.optimizer
 Nthreads = args.Nthreads
@@ -38,7 +40,6 @@ Nensemble = args.Nensemble
 maxiter = args.maxiter
 n_seed = args.n_seed
 load_data = args.load_data
-cuda_ind = 0
 
 # Geometry
 Nx = args.Nx
@@ -69,12 +70,10 @@ in_plane_wavevector = np.array([0.0, 0.0])
 period = np.array([Nx * d_pixel, Ny * d_pixel])
 thickness_background = 1.0
 thickness_pattern = 0.7
-thickness_spacer = 2.0
 thickness_substrate = 1.0
 
 mat_background = np.array(['Air']) # background (incident side)
 mat_pattern = np.array(['SiO2_bulk','Si3N4_Luke']) # Low RI, High RI
-mat_spacer = np.array(['SiO2_bulk'])
 mat_substrate = np.array(['Si_Schinke_Shkondin'])
 
 cost_obj_high_fidelity = objfun.custom_objective(
@@ -83,17 +82,14 @@ cost_obj_high_fidelity = objfun.custom_objective(
     period,
     thickness_background,
     thickness_pattern,
-    thickness_spacer,
     thickness_substrate,
     lam,
     in_plane_wavevector,
     mat_background,
     mat_pattern,
-    mat_spacer,
     mat_substrate,
-    IPR_exponent=IPR_exponent,
+    IPR_exponent=1/1,
 )
-
 
 cost_obj_low_fidelity = objfun.custom_objective(
     Nx,
@@ -101,15 +97,13 @@ cost_obj_low_fidelity = objfun.custom_objective(
     period,
     thickness_background,
     thickness_pattern,
-    thickness_spacer,
     thickness_substrate,
     lam,
     in_plane_wavevector,
     mat_background,
     mat_pattern,
-    mat_spacer,
     mat_substrate,
-    IPR_exponent=IPR_exponent,
+    IPR_exponent=1/1,
 )
 
 # Optimizer Settings
@@ -150,6 +144,32 @@ if optimization_algorithm == 'TF_BFGS':
     
     T1 = time.time()
     optimizer.run(n_seed, output_filename, maxiter, beta_init=8.0, beta_ratio=2.0, n_beta=5, load_data=load_data)
+    T2 = time.time()
+    print('\n### Total time: ' + str(T2 - T1), flush=True)
+
+elif optimization_algorithm == 'AF_STE':
+    Ntrial = int(np.round(Nensemble/(t_fwd_AD/t_high_fidelity)))
+    eta = args.eta
+
+    output_filename = 'RGB_color_router_IPR' + str(int(1/IPR_exponent)) + '_Ntrial' + str(Ntrial) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+        + '_eta' + str(eta) + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
+
+    optimizer = AF_STE.optimizer(
+        Nx=Nx,
+        Ny=Ny,
+        Ntrial=Ntrial,
+        symmetry=symmetry,
+        periodic=periodic,
+        padding=padding,
+        high_fidelity_setting=high_fidelity_setting,
+        min_feature_size=min_feature_size,
+        upsample_ratio=upsample_ratio,
+        cost_obj=cost_obj_high_fidelity,
+        Nthreads=Nthreads,
+    )
+
+    T1 = time.time()
+    optimizer.run(n_seed, output_filename, maxiter, eta_ADAM=eta, load_data=load_data)
     T2 = time.time()
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 

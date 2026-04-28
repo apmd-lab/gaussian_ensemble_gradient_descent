@@ -2,13 +2,14 @@ import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
-sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
+#sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
+sys.path.append('/ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent')
 
-Nthreads = 8
-cuda_ind = 1
+Nthreads = 5
+cuda_ind = 0
 os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+#os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+#os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 import numpy as np
 import jax
@@ -59,7 +60,7 @@ thickness_pattern = 0.7
 thickness_substrate = 1.0
 
 mat_background = np.array(['Air']) # background (incident side)
-mat_pattern = np.array(['SiO2_bulk','Si3N4_Luke']) # Low RI, High RI
+mat_pattern = np.array(['Air','Si3N4_Luke']) # Low RI, High RI
 mat_substrate = np.array(['Si_Schinke_Shkondin'])
 
 cost_obj = objfun.custom_objective(

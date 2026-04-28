@@ -14,9 +14,13 @@ export OPENBLAS_NUM_THREADS=5
 export MKL_NUM_THREADS=5
 export NUMEXPR_NUM_THREADS=5
 
+module load anaconda3
+source activate gegd_dev
+module load cuda/12.6
+
 ## Test Function RBF -----------------------------------------------------
 
-##python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_test_functions.py \
+##python run_optimization_test_functions.py \
 ##    --Nthreads 48 \
 ##    --n_seed 0 \
 ##    --load_data 0 \
@@ -34,7 +38,7 @@ export NUMEXPR_NUM_THREADS=5
 
 ## Polarization Beamsplitter -----------------------------------------------------
 : << 'END_COMMENT'
-python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_polarization_beamsplitter.py \
+python run_optimization_polarization_beamsplitter.py \
     --Nthreads 8 \
     --n_seed 0 \
     --load_data 0 \
@@ -53,7 +57,7 @@ END_COMMENT
 
 ## RGB Coupler -----------------------------------------------------
 : << 'END_COMMENT'
-python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_RGB_coupler.py \
+python run_optimization_RGB_coupler.py \
     --Nthreads 8 \
     --n_seed 9 \
     --load_data 0 \
@@ -72,9 +76,9 @@ END_COMMENT
 
 ## RGB Color Router -----------------------------------------------------
 ##: << 'END_COMMENT'
-python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_RGB_color_router.py \
-    --Nthreads 8 \
-    --n_seed 0 \
+python run_optimization_RGB_color_router.py \
+    --Nthreads 5 \
+    --n_seed 2 \
     --load_data 0 \
     --optimizer 'GEGD' \
     --Nensemble 20 \

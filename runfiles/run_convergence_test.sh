@@ -1,24 +1,28 @@
 #!/bin/bash
 
-#SBATCH -o /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/slurm/run_convergence_test.log-%j
-#SBATCH --partition=48core
-#SBATCH --nodelist=node2
-#SBATCH --exclusive
+#SBATCH -o slurm/run_convergence_test.log-%j
+#SBATCH --partition=GPU-shared
 #SBATCH --job-name=conv_test
-
-export OMP_NUM_THREADS=16
-export OPENBLAS_NUM_THREADS=16
-export MKL_NUM_THREADS=16
-export NUMEXPR_NUM_THREADS=16
-
+##SBATCH --exclusive
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=5
+#SBATCH --gres=gpu:v100-32:1
+#SBATCH --time=24:00:00
 
-##python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/RCWA_functions/polarization_beamsplitter_convergence_test_FMMAX.py
-##python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/RCWA_functions/RGB_coupler_convergence_test_FMMAX.py
-python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/RCWA_functions/RGB_color_router_convergence_test_FMMAX.py
+export OMP_NUM_THREADS=5
+export OPENBLAS_NUM_THREADS=5
+export MKL_NUM_THREADS=5
+export NUMEXPR_NUM_THREADS=5
 
-##python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/FDTD_functions/WDM_diplexer_convergence_test_ceviche.py
+module load anaconda3
+source activate gegd_dev
+module load cuda/12.6
+
+##python /ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent/runfiles/RCWA_functions/polarization_beamsplitter_convergence_test_FMMAX.py
+##python /ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent/runfiles/RCWA_functions/RGB_coupler_convergence_test_FMMAX.py
+python /ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent/runfiles/RCWA_functions/RGB_color_router_convergence_test_FMMAX.py
+
+##python /ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent/runfiles/FDTD_functions/WDM_diplexer_convergence_test_ceviche.py
 
 ##export QT_QPA_PLATFORM=offscreen
 ##python /home/minseokhwan/Ensemble_Optimization/FDTD_functions/integrated_bandpass_filter_convergence_test_lumFDTD.py --Nthreads 12
