@@ -73,7 +73,7 @@ thickness_pattern = 0.7
 thickness_substrate = 1.0
 
 mat_background = np.array(['Air']) # background (incident side)
-mat_pattern = np.array(['SiO2_bulk','Si3N4_Luke']) # Low RI, High RI
+mat_pattern = np.array(['Air','Si3N4_Luke']) # Low RI, High RI
 mat_substrate = np.array(['Si_Schinke_Shkondin'])
 
 cost_obj_high_fidelity = objfun.custom_objective(
@@ -112,12 +112,12 @@ cost_obj_low_fidelity = objfun.custom_objective(
 # high-fidelity: accuracy required for actual application
 # low-fidelity: faster and less accurate, but accurate enough to ensure high correlation with the high-fidelity simulations
 #--------------------------------------------------------------------------------------------------------------------------
-low_fidelity_setting = 8**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-high_fidelity_setting = 23**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-t_low_fidelity = 0.062 # low-fidelity simulation time in seconds
-t_high_fidelity = 0.697 # high-fidelity simulation time in seconds
+low_fidelity_setting = 14**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+high_fidelity_setting = 32**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+t_low_fidelity = 0.298 # low-fidelity simulation time in seconds
+t_high_fidelity = 3.394 # high-fidelity simulation time in seconds
 t_iteration = t_high_fidelity*Nensemble # target time per optimization iteration in seconds (actual time may be slightly longer due to the brush generator)
-t_fwd_AD = 0.740
+t_fwd_AD = 3.979
 
 cost_obj_high_fidelity.set_accuracy(high_fidelity_setting)
 cost_obj_low_fidelity.set_accuracy(low_fidelity_setting)

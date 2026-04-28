@@ -465,10 +465,10 @@ class optimizer:
         f_ctrl_logDeriv_all = np.zeros((self.r_CV*self.Nensemble, self.Ndim+self.Nsigma))
         for n in range(self.r_CV*self.Nensemble):
             #t1 = time.time()
-            if self.r_CV == 1:
-                f_temp = np.random.rand()
-            else:
+            if self.use_ctrlVar:
                 f_temp = self.cost_obj_low_fidelity.get_cost(x_sample[n,:], False)
+            else:
+                f_temp = np.random.rand()
             #t2 = time.time()
             #print('time: ' + str(t2 - t1), flush=True)
             f_shifted = (f_temp - self.cost_threshold)/(self.cost_threshold + 1)
