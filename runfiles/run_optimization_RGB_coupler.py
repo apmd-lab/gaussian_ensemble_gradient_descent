@@ -26,10 +26,14 @@ args = parser.parse_args()
 
 cuda_ind = args.cuda_ind
 os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
-#os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 #os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.5"
-#os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 #os.environ["TF_FORCE_UNIFIED_MEMORY"] = "1"
+os.environ["OMP_NUM_THREADS"] = str(args.Nthreads)
+os.environ["OPENBLAS_NUM_THREADS"] = str(args.Nthreads)
+os.environ["MKL_NUM_THREADS"] = str(args.Nthreads)
+os.environ["NUMEXPR_NUM_THREADS"] = str(args.Nthreads)
 
 import numpy as np
 from gegd.optimizer import TF_BFGS, AF_STE, GEGD, AF_PSO, AF_GA, sep_CMA_ES
@@ -204,11 +208,12 @@ elif optimization_algorithm == 'GEGD':
         upsample_ratio=upsample_ratio,
         beta_proj=beta_proj,
         feasible_design_generation_method=feasible_design_generation_method,
-        covariance_type='gaussian_constant',
+        covariance_type='constant', #gaussian_constant
         coeff_exp=coeff_exp,
         cost_threshold=cost_threshold,
         cost_obj_high_fidelity=cost_obj_high_fidelity,
         cost_obj_low_fidelity=cost_obj_low_fidelity,
+        use_ctrlVar=False,
         Nthreads=Nthreads,
         cuda_ind=cuda_ind,
         verbosity=1,

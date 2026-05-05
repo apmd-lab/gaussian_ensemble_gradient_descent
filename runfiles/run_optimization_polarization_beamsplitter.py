@@ -201,7 +201,7 @@ elif optimization_algorithm == 'GEGD':
         upsample_ratio=upsample_ratio,
         beta_proj=beta_proj,
         feasible_design_generation_method=feasible_design_generation_method,
-        covariance_type='constant', #'gaussian_constant',
+        covariance_type='gaussian_constant', #'gaussian_constant',
         coeff_exp=coeff_exp,
         cost_threshold=cost_threshold,
         cost_obj_high_fidelity=cost_obj_high_fidelity,
