@@ -69,7 +69,7 @@ END_COMMENT
 ##: << 'END_COMMENT'
 python run_optimization_RGB_color_router.py \
     --Nthreads 5 \
-    --n_seed 0 \
+    --n_seed 9 \
     --load_data 0 \
     --optimizer 'TF_BFGS' \
     --Nensemble 20 \
@@ -77,6 +77,6 @@ python run_optimization_RGB_color_router.py \
     --Ny 100 \
     --symmetry 3 \
     --upsample_ratio 1 \
-    --maxiter 500 \
+    --maxiter 400 \
     --min_feature_size 7
 ##END_COMMENT

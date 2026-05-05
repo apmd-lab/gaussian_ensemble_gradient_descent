@@ -51,7 +51,7 @@ python run_optimization_polarization_beamsplitter.py \
 END_COMMENT
 
 ## RGB Coupler -----------------------------------------------------
-##: << 'END_COMMENT'
+: << 'END_COMMENT'
 python run_optimization_RGB_coupler.py \
     --Nthreads 5 \
     --n_seed 9 \
@@ -61,6 +61,23 @@ python run_optimization_RGB_coupler.py \
     --Nx 60 \
     --Ny 263 \
     --symmetry 1 \
+    --upsample_ratio 1 \
+    --maxiter 400 \
+    --min_feature_size 7 \
+    --eta 0.01
+END_COMMENT
+
+## RGB Color Router -----------------------------------------------------
+##: << 'END_COMMENT'
+python run_optimization_RGB_color_router.py \
+    --Nthreads 5 \
+    --n_seed 3 \
+    --load_data 0 \
+    --optimizer 'AF_STE' \
+    --Nensemble 20 \
+    --Nx 100 \
+    --Ny 100 \
+    --symmetry 3 \
     --upsample_ratio 1 \
     --maxiter 400 \
     --min_feature_size 7 \

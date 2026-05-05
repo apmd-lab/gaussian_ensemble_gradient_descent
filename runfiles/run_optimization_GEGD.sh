@@ -78,7 +78,7 @@ END_COMMENT
 ##: << 'END_COMMENT'
 python run_optimization_RGB_color_router.py \
     --Nthreads 5 \
-    --n_seed 0 \
+    --n_seed 10 \
     --load_data 0 \
     --optimizer 'GEGD' \
     --Nensemble 20 \
@@ -87,7 +87,7 @@ python run_optimization_RGB_color_router.py \
     --symmetry 3 \
     --upsample_ratio 1 \
     --coeff_exp 20 \
-    --maxiter 500 \
+    --maxiter 400 \
     --sigma_ensemble 1e-2 \
     --eta 5e-5 \
     --min_feature_size 7
