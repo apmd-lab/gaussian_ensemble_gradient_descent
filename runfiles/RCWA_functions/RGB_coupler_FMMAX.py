@@ -30,20 +30,29 @@ class custom_objective:
         formulation=fmm.Formulation.JONES_DIRECT, #FFT, JONES_DIRECT, JONES, NORMAL, POL
         IPR_exponent=1/5,
         incident_pol='TM',
+        precision='float32',
     ):
+
+        if precision == 'float64':
+            jax.config.update("jax_enable_x64", True)
+            self.dtype_real = jnp.float64
+            self.dtype_complex = jnp.complex128
+        else:
+            self.dtype_real = jnp.float32
+            self.dtype_complex = jnp.complex64
 
         # Set Material Properties
         self.n_freq = lam.size
-        self.lam = jnp.asarray(lam)
-        self.freq = jnp.asarray(1/lam)
+        self.lam = jnp.asarray(lam, dtype=self.dtype_real)
+        self.freq = jnp.asarray(1/lam, dtype=self.dtype_real)
         
         mat_type = list(set(np.hstack((mat_pattern, mat_background))))
         raw_wavelength, mat_dict = rmd.load_all(1e3*lam, 'n_k', mat_type)
 
-        self.eps_incident_medium = jnp.asarray(mat_dict[mat_background[0]]**2)[:,jnp.newaxis,jnp.newaxis] # freq, x, y
-        self.eps_substrate = jnp.asarray(mat_dict[mat_background[1]]**2)[:,jnp.newaxis,jnp.newaxis]
-        self.RI_void = jnp.asarray(mat_dict[mat_pattern[0]])[:,jnp.newaxis,jnp.newaxis]
-        self.delta_RI = (jnp.asarray(mat_dict[mat_pattern[1]]) - jnp.asarray(mat_dict[mat_pattern[0]]))[:,jnp.newaxis,jnp.newaxis]
+        self.eps_incident_medium = jnp.asarray(mat_dict[mat_background[0]]**2, dtype=self.dtype_complex)[:,jnp.newaxis,jnp.newaxis] # freq, x, y
+        self.eps_substrate = jnp.asarray(mat_dict[mat_background[1]]**2, dtype=self.dtype_complex)[:,jnp.newaxis,jnp.newaxis]
+        self.RI_void = jnp.asarray(mat_dict[mat_pattern[0]], dtype=self.dtype_complex)[:,jnp.newaxis,jnp.newaxis]
+        self.delta_RI = (jnp.asarray(mat_dict[mat_pattern[1]], dtype=self.dtype_complex) - jnp.asarray(mat_dict[mat_pattern[0]], dtype=self.dtype_complex))[:,jnp.newaxis,jnp.newaxis]
 
         # Set Simulation Geometry
         self.Nx = Nx
@@ -56,7 +65,7 @@ class custom_objective:
         )
 
         # Set Incidence Conditions
-        self.in_plane_wavevector = jnp.asarray(in_plane_wavevector)
+        self.in_plane_wavevector = jnp.asarray(in_plane_wavevector, dtype=self.dtype_real)
         self.diff_order = jnp.asarray(diff_order)
         self.incident_pol = incident_pol
 
@@ -100,7 +109,7 @@ class custom_objective:
             for p in permittivities
         ]
 
-        forward_amplitude_0_start = jnp.zeros((self.n_freq, 2 * self.basis_expansion.num_terms, 1), dtype=complex)
+        forward_amplitude_0_start = jnp.zeros((self.n_freq, 2 * self.basis_expansion.num_terms, 1), dtype=self.dtype_complex)
         if self.incident_pol == 'TM':
             forward_amplitude_0_start = forward_amplitude_0_start.at[:,0,0].set(1)  # te
         elif self.incident_pol == 'TE':
@@ -119,9 +128,9 @@ class custom_objective:
 
     def get_cost(self, x, get_grad=False):
         if x.ndim == 1:
-            density = jnp.asarray(x, dtype=float).reshape((self.Nx, self.Ny))
+            density = jnp.asarray(x, dtype=self.dtype_real).reshape((self.Nx, self.Ny))
         else:
-            density = jnp.asarray(x, dtype=float)
+            density = jnp.asarray(x, dtype=self.dtype_real)
 
         cost_fn, grad_fn = self.jit_get_diffraction_costs
 
@@ -168,6 +177,7 @@ class custom_objective:
         IPR_exponent = self.IPR_exponent
         incident_power = self.incident_power
         incident_pol = self.incident_pol
+        dtype_complex = self.dtype_complex
 
         def _pure_cost_fn(density):
             permittivities = [
@@ -195,7 +205,7 @@ class custom_objective:
                 layer_thicknesses=[jnp.asarray(t) for t in thicknesses],
             )
     
-            forward_amplitude_0_start = jnp.zeros((n_freq, 2 * expansion.num_terms, 1), dtype=complex)
+            forward_amplitude_0_start = jnp.zeros((n_freq, 2 * expansion.num_terms, 1), dtype=dtype_complex)
             if incident_pol == 'TM':
                 forward_amplitude_0_start = forward_amplitude_0_start.at[:,0,0].set(1)  # te
             elif incident_pol == 'TE':
@@ -222,9 +232,9 @@ class custom_objective:
     
     def get_diffraction_and_fields(self, x, upsampling_ratio):
         if x.ndim == 1:
-            density = jnp.asarray(x, dtype=float).reshape((self.Nx, self.Ny))
+            density = jnp.asarray(x, dtype=self.dtype_real).reshape((self.Nx, self.Ny))
         else:
-            density = jnp.asarray(x, dtype=float)
+            density = jnp.asarray(x, dtype=self.dtype_real)
         
         permittivities = [
             self.eps_incident_medium,
@@ -252,7 +262,7 @@ class custom_objective:
             layer_thicknesses=[jnp.asarray(t) for t in thicknesses],
         )
 
-        forward_amplitude_0_start = jnp.zeros((self.n_freq, 2 * self.basis_expansion.num_terms, 1), dtype=complex)
+        forward_amplitude_0_start = jnp.zeros((self.n_freq, 2 * self.basis_expansion.num_terms, 1), dtype=self.dtype_complex)
         if self.incident_pol == 'TM':
             forward_amplitude_0_start = forward_amplitude_0_start.at[:,0,0].set(1)  # te
         elif self.incident_pol == 'TE':

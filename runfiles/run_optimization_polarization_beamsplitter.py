@@ -21,6 +21,7 @@ parser.add_argument('--sigma_ensemble', type=float, default=0.01)
 parser.add_argument('--eta', type=float, default=1)
 parser.add_argument('--min_feature_size', type=int, default=7)
 parser.add_argument('--cuda_ind', type=int, default=0)
+parser.add_argument('--precision', type=str, default='float32')
 args = parser.parse_args()
 
 cuda_ind = args.cuda_ind
@@ -92,6 +93,7 @@ cost_obj_high_fidelity = objfun.custom_objective(
     mat_pattern,
     diff_order,
     IPR_exponent=IPR_exponent,
+    precision=args.precision,
 )
 
 cost_obj_low_fidelity = objfun.custom_objective(
@@ -105,6 +107,7 @@ cost_obj_low_fidelity = objfun.custom_objective(
     mat_pattern,
     diff_order,
     IPR_exponent=IPR_exponent,
+    precision=args.precision,
 )
 
 # Optimizer Settings

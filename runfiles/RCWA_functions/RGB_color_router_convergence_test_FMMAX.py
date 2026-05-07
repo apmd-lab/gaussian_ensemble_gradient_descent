@@ -76,6 +76,7 @@ cost_obj = objfun.custom_objective(
     mat_pattern,
     mat_substrate,
     IPR_exponent=1/1,
+    precision='float64'
 )
 
 # Convergence Test

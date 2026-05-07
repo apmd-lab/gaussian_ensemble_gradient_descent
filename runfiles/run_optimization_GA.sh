@@ -1,18 +1,22 @@
 #!/bin/bash
 
-#SBATCH -o /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/slurm/run_optimization.log-%j
-#SBATCH --partition=48core
-#SBATCH --nodelist=node1
+#SBATCH -o slurm/run_optimization.log-%j
+#SBATCH --partition=GPU-shared
 #SBATCH --job-name=ens_opt
 ##SBATCH --exclusive
-
-export OMP_NUM_THREADS=8
-export OPENBLAS_NUM_THREADS=8
-export MKL_NUM_THREADS=8
-export NUMEXPR_NUM_THREADS=8
-
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=5
+#SBATCH --gres=gpu:v100-32:1
+#SBATCH --time=12:00:00
+
+export OMP_NUM_THREADS=5
+export OPENBLAS_NUM_THREADS=5
+export MKL_NUM_THREADS=5
+export NUMEXPR_NUM_THREADS=5
+
+module load anaconda3
+source activate gegd_dev
+module load cuda/12.6
 
 ## Test Function RBF -----------------------------------------------------
 
@@ -46,7 +50,7 @@ python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimiz
 END_COMMENT
 
 ## RGB Coupler -----------------------------------------------------
-##: << 'END_COMMENT'
+: << 'END_COMMENT'
 python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_RGB_coupler.py \
     --Nthreads 8 \
     --n_seed 0 \
@@ -59,4 +63,20 @@ python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimiz
     --upsample_ratio 1 \
     --maxiter 300 \
     --min_feature_size 7
+END_COMMENT
+
+## RGB Color Router -----------------------------------------------------
+##: << 'END_COMMENT'
+python run_optimization_RGB_color_router.py \
+    --Nthreads 5 \
+    --n_seed 9 \
+    --load_data 0 \
+    --optimizer 'AF_GA' \
+    --Nensemble 20 \
+    --Nx 100 \
+    --Ny 100 \
+    --symmetry 3 \
+    --upsample_ratio 1 \
+    --maxiter 400 \
+    --min_feature_size 7 \
 ##END_COMMENT

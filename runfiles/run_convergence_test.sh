@@ -6,8 +6,8 @@
 ##SBATCH --exclusive
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=5
-#SBATCH --gres=gpu:v100-32:1
-#SBATCH --time=24:00:00
+#SBATCH --gres=gpu:h100-80:1
+#SBATCH --time=2:00:00
 
 export OMP_NUM_THREADS=5
 export OPENBLAS_NUM_THREADS=5
