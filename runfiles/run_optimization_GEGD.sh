@@ -1,46 +1,29 @@
 #!/bin/bash
 
 #SBATCH -o slurm/run_optimization.log-%j
-#SBATCH --partition=GPU-shared
+#SBATCH --partition=gpu_only
 #SBATCH --job-name=ens_opt
 ##SBATCH --exclusive
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=5
-#SBATCH --gres=gpu:v100-32:1
-#SBATCH --time=48:00:00
+#SBATCH --cpus-per-task=32
+#SBATCH --gres=gpu:h100:1
+#SBATCH --time=24:00:00
 
-export OMP_NUM_THREADS=5
-export OPENBLAS_NUM_THREADS=5
-export MKL_NUM_THREADS=5
-export NUMEXPR_NUM_THREADS=5
+export OMP_NUM_THREADS=32
+export OPENBLAS_NUM_THREADS=32
+export MKL_NUM_THREADS=32
+export NUMEXPR_NUM_THREADS=32
 
 module load anaconda3
+unset PYTHONPATH PYTHONHOME
 source activate gegd_dev
-module load cuda/12.6
-
-## Test Function RBF -----------------------------------------------------
-
-##python run_optimization_test_functions.py \
-##    --Nthreads 48 \
-##    --n_seed 0 \
-##    --load_data 0 \
-##    --optimizer 'GEGD' \
-##    --Nensemble 10 \
-##    --Nx 37 \
-##    --Ny 269 \
-##    --symmetry 1 \
-##    --upsample_ratio 1 \
-##    --coeff_exp 20 \
-##    --maxiter 500 \
-##    --sigma_ensemble 1e-2 \
-##    --eta 1e-5 \
-##    --min_feature_size 9
+module load cuda/12.9
 
 ## Polarization Beamsplitter -----------------------------------------------------
-: << 'END_COMMENT'
+##: << 'END_COMMENT'
 python run_optimization_polarization_beamsplitter.py \
-    --Nthreads 8 \
-    --n_seed 0 \
+    --Nthreads 32 \
+    --n_seed 9 \
     --load_data 0 \
     --optimizer 'GEGD' \
     --Nensemble 20 \
@@ -52,8 +35,9 @@ python run_optimization_polarization_beamsplitter.py \
     --maxiter 400 \
     --sigma_ensemble 1e-2 \
     --eta 5e-5 \
-    --min_feature_size 7
-END_COMMENT
+    --min_feature_size 7 \
+    --precision 'float64'
+##END_COMMENT
 
 ## RGB Coupler -----------------------------------------------------
 : << 'END_COMMENT'
@@ -75,7 +59,7 @@ python run_optimization_RGB_coupler.py \
 END_COMMENT
 
 ## RGB Color Router -----------------------------------------------------
-##: << 'END_COMMENT'
+: << 'END_COMMENT'
 python run_optimization_RGB_color_router.py \
     --Nthreads 5 \
     --n_seed 10 \
@@ -91,4 +75,4 @@ python run_optimization_RGB_color_router.py \
     --sigma_ensemble 1e-2 \
     --eta 5e-5 \
     --min_feature_size 7
-##END_COMMENT
+END_COMMENT

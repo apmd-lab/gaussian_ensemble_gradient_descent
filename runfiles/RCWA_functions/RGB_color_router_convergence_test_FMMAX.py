@@ -3,9 +3,10 @@ directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
 #sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
-sys.path.append('/ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent')
+#sys.path.append('/ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent')
+sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
 
-Nthreads = 5
+Nthreads = 100
 cuda_ind = 0
 os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
 #os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
@@ -82,7 +83,7 @@ cost_obj = objfun.custom_objective(
 # Convergence Test
 print('### Convergence Test')
 
-n_struct = 10
+n_struct = 100
 np.random.seed(100)
 x = 2*np.random.rand(n_struct, Ndim) - 1
 t1 = time.time()
@@ -105,68 +106,55 @@ brush_time = t2 - t1
 
 load_data = False
 
-n_harmonic = np.arange(2, 47)**2
+n_harmonic = np.arange(2, 49)**2
 
-if load_data:
-    with np.load("RGB_color_router_convergence_test_FMMAX_JONES_DIRECT_Nx" + str(Nx) + "_Ny" + str(Ny) + "_mfs" + str(min_feature_size) + ".npz") as data:
-        cost_all_temp = data['cost_all']
-        sim_time_temp = data['sim_time']
-        sim_time_AD_temp = data['sim_time_AD']
-        n_start = 0 #np.argmin(sim_time[:,0,0]) - 1
-        nh_start = 25
+cost_all = np.zeros((n_struct, n_harmonic.size))
+sim_time = np.zeros((n_struct, n_harmonic.size))
+sim_time_AD = np.zeros((n_struct, n_harmonic.size))
 
-    cost_all = np.zeros((n_struct, n_harmonic.size))
-    sim_time = np.zeros((n_struct, n_harmonic.size))
-    sim_time_AD = np.zeros((n_struct, n_harmonic.size))
-
-    cost_all[:,:nh_start] = cost_all_temp
-    sim_time[:,:nh_start] = sim_time_temp
-    sim_time_AD[:,:nh_start] = sim_time_AD_temp
-
-else:
-    cost_all = np.zeros((n_struct, n_harmonic.size))
-    sim_time = np.zeros((n_struct, n_harmonic.size))
-    sim_time_AD = np.zeros((n_struct, n_harmonic.size))
-    n_start = 0
-    nh_start = 0
-
-for nb in range(n_start, n_struct):
-    print('\tStructure ' + str(nb), flush=True)
+for nh in range(n_harmonic.size):
+    print('\tHarmonics: ' + str(n_harmonic[nh]), flush=True)
+    cost_obj.set_accuracy(n_harmonic[nh])
     
-    for nh in range(nh_start, n_harmonic.size):
-        print('\t\tHarmonics: ' + str(n_harmonic[nh]), end='', flush=True)
-        cost_obj.set_accuracy(n_harmonic[nh])
+    # account for JIT compilation
+    x_dummy = x_brush_all[0,:].reshape(Nx, Ny)
+    _ = cost_obj.get_cost(x_dummy, False)
+    _ = cost_obj.get_cost(x_dummy, True)
+    
+    step = max(1, n_struct // 100)
+    for idx, nb in enumerate(range(n_struct)):
+        if idx % step == 0 or idx == n_struct - 1:
+            pct = (idx + 1) / n_struct
+            bar = '█' * int(30 * pct) + '░' * (30 - int(30 * pct))
+            print(f'\r\t\t[{bar}] {100*pct:5.1f}% ({idx+1}/{n_struct})', end='', flush=True)
+    
         x = x_brush_all[nb,:].reshape(Nx, Ny)
     
-        cost = cost_obj.get_cost(x, False) # account for JIT compilation
         time_temp = np.zeros(1)
         for i in range(1):
             t1 = time.time()
             cost = cost_obj.get_cost(x, False)
             t2 = time.time()
             time_temp[i] = t2 - t1
-        jax.clear_caches()
         sim_time[nb,nh] = np.mean(time_temp)
-    
         cost_all[nb,nh] = cost
-        print(' | Fwd Time: ' + str(sim_time[nb,nh]) + ' s', end='', flush=True)
-    
-        cost = cost_obj.get_cost(x, True)
+        
         time_temp = np.zeros(1)
         for i in range(1):
             t1 = time.time()
             cost = cost_obj.get_cost(x, True)
             t2 = time.time()
             time_temp[i] = t2 - t1
-        jax.clear_caches()
         sim_time_AD[nb,nh] = np.mean(time_temp)
+        
+    print(f' | Fwd Time: {np.mean(sim_time[:,nh]):.4f} s | Fwd+AD Time: {np.mean(sim_time_AD[:,nh]):.4f} s', flush=True)
     
-        print(' | Fwd+AD Time: ' + str(sim_time_AD[nb,nh]) + ' s', flush=True)
+    jax.clear_caches()
     
-        np.savez("RGB_color_router_convergence_test_FMMAX_JONES_DIRECT_Nx" + str(Nx) + "_Ny" + str(Ny) + "_mfs" + str(min_feature_size),# + "_10reps",
-            cost_all=cost_all,
-            brush_time=brush_time,
-            sim_time=sim_time,
-            x_brush_all=x_brush_all,
-            sim_time_AD=sim_time_AD,
-        )
+    np.savez("RGB_color_router_convergence_test_FMMAX_JONES_DIRECT_Nx" + str(Nx) + "_Ny" + str(Ny) + "_mfs" + str(min_feature_size),# + "_10reps",
+        cost_all=cost_all,
+        brush_time=brush_time,
+        sim_time=sim_time,
+        x_brush_all=x_brush_all,
+        sim_time_AD=sim_time_AD,
+    )

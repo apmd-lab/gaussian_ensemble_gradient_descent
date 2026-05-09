@@ -2,7 +2,8 @@ import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
-sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
+#sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
+sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -26,12 +27,12 @@ args = parser.parse_args()
 
 cuda_ind = args.cuda_ind
 os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-os.environ["OMP_NUM_THREADS"] = str(args.Nthreads)
-os.environ["OPENBLAS_NUM_THREADS"] = str(args.Nthreads)
-os.environ["MKL_NUM_THREADS"] = str(args.Nthreads)
-os.environ["NUMEXPR_NUM_THREADS"] = str(args.Nthreads)
+#os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+#os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+#os.environ["OMP_NUM_THREADS"] = str(args.Nthreads)
+#os.environ["OPENBLAS_NUM_THREADS"] = str(args.Nthreads)
+#os.environ["MKL_NUM_THREADS"] = str(args.Nthreads)
+#os.environ["NUMEXPR_NUM_THREADS"] = str(args.Nthreads)
 
 import numpy as np
 from gegd.optimizer import TF_BFGS, AF_STE, GEGD, AF_PSO, AF_GA, sep_CMA_ES
@@ -116,12 +117,12 @@ cost_obj_low_fidelity = objfun.custom_objective(
 # high-fidelity: accuracy required for actual application
 # low-fidelity: faster and less accurate, but accurate enough to ensure high correlation with the high-fidelity simulations
 #--------------------------------------------------------------------------------------------------------------------------
-low_fidelity_setting = 17**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-high_fidelity_setting = 38**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-t_low_fidelity = 0.12 # low-fidelity simulation time in seconds
-t_high_fidelity = 1.26 # high-fidelity simulation time in seconds
+low_fidelity_setting = 18**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+high_fidelity_setting = 36**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+t_low_fidelity = 0.18 # low-fidelity simulation time in seconds
+t_high_fidelity = 1.45 # high-fidelity simulation time in seconds
 t_iteration = t_high_fidelity*Nensemble # target time per optimization iteration in seconds (actual time may be slightly longer due to the brush generator)
-t_fwd_AD = 1.44
+t_fwd_AD = 1.61
 
 cost_obj_high_fidelity.set_accuracy(high_fidelity_setting)
 cost_obj_low_fidelity.set_accuracy(low_fidelity_setting)
@@ -204,7 +205,7 @@ elif optimization_algorithm == 'GEGD':
         upsample_ratio=upsample_ratio,
         beta_proj=beta_proj,
         feasible_design_generation_method=feasible_design_generation_method,
-        covariance_type='gaussian_constant', #'gaussian_constant',
+        covariance_type='constant', #'gaussian_constant',
         coeff_exp=coeff_exp,
         cost_threshold=cost_threshold,
         cost_obj_high_fidelity=cost_obj_high_fidelity,

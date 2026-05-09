@@ -2,8 +2,9 @@ import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
-sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
+#sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
 #sys.path.append('/ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent')
+sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -27,14 +28,14 @@ args = parser.parse_args()
 
 cuda_ind = args.cuda_ind
 os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+#os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 #os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.5"
-os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+#os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 #os.environ["TF_FORCE_UNIFIED_MEMORY"] = "1"
-os.environ["OMP_NUM_THREADS"] = str(args.Nthreads)
-os.environ["OPENBLAS_NUM_THREADS"] = str(args.Nthreads)
-os.environ["MKL_NUM_THREADS"] = str(args.Nthreads)
-os.environ["NUMEXPR_NUM_THREADS"] = str(args.Nthreads)
+#os.environ["OMP_NUM_THREADS"] = str(args.Nthreads)
+#os.environ["OPENBLAS_NUM_THREADS"] = str(args.Nthreads)
+#os.environ["MKL_NUM_THREADS"] = str(args.Nthreads)
+#os.environ["NUMEXPR_NUM_THREADS"] = str(args.Nthreads)
 
 import numpy as np
 from gegd.optimizer import TF_BFGS, AF_STE, GEGD, AF_PSO, AF_GA, sep_CMA_ES
