@@ -45,7 +45,7 @@ pip install gegd
   
   - Padding: specifies the geometry around the design region for non-periodic devices
     - None: if periodic
-    - ndarray of size (Nx + 2brush_size, Ny + 2brush_size): if non-periodic (refer to [Example 2](./runfiles/run_optimization_mode_converter.py) for details). The center part of the array [-brush_size:brush_size,-brush_size:brush_size] should be left undetermined (values of 0). Pixels in the outer padding can be assigned values of -1 (void) or 1 (solid). Make sure that the padding itself satisfies the minimum feature size defined by brush_size.
+    - ndarray of size (Nx + 2\*minimum_feature_size, Ny + 2\*minimum_feature_size): if non-periodic (refer to [Example 2](./runfiles/run_optimization_mode_converter.py) for details). The center part of the array [-minimum_feature_size:minimum_feature_size,-minimum_feature_size:minimum_feature_size] should be left undetermined (values of 0). Pixels in the outer padding can be assigned values of -1 (void) or 1 (solid). Make sure that the padding itself satisfies the minimum feature size defined by minimum_feature_size.
 
 **3. Processing of Latent Density into Fully Feasible Designs**
 
