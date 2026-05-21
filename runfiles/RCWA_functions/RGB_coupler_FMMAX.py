@@ -317,4 +317,4 @@ class custom_objective:
         y = jax.device_get(y)
         z = jax.device_get(z)
 
-        return T_tgt, E_in_plane, x, y, z, transmitted_power, self.incident_power
+        return T_tgt, E_in_plane, x, y, z, transmitted_power, self.incident_power, self.coeffs

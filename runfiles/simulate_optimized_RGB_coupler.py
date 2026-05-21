@@ -2,14 +2,15 @@ import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
-sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
+#sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
 #sys.path.append('/ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent/runfiles')
+sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
 
 import numpy as np
 from scipy.ndimage import gaussian_filter, zoom
 import time
 
-Nthreads = 8
+Nthreads = 20
 cuda_ind = 0
 os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
 #os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
@@ -65,6 +66,7 @@ cost_obj = objfun.custom_objective(
     diff_order,
     IPR_exponent=IPR_exponent,
     incident_pol=incident_pol,
+    precision='float64',
 )
 
 cost_obj_upsampled = objfun.custom_objective(
@@ -79,6 +81,7 @@ cost_obj_upsampled = objfun.custom_objective(
     diff_order,
     IPR_exponent=IPR_exponent,
     incident_pol=incident_pol,
+    precision='float64',
 )
 
 
@@ -89,7 +92,7 @@ cost_obj_upsampled = objfun.custom_objective(
 # low-fidelity: faster and less accurate, but accurate enough to ensure high correlation with the high-fidelity simulations
 #--------------------------------------------------------------------------------------------------------------------------
 low_fidelity_setting = 24**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-high_fidelity_setting = 50**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+high_fidelity_setting = 46**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
 cost_obj.set_accuracy(high_fidelity_setting)
 cost_obj_upsampled.set_accuracy(high_fidelity_setting)
 
@@ -108,35 +111,17 @@ print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GEGD[idx_best], flush=Tru
 with np.load(directory + "/RCWA_functions/RGB_coupler/GEGD/RGB_coupler_IPR1_Nensemble20_Ndim60x263_D1_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(idx_best + 1) + "_GEGD_results.npz") as data:
     x = data['best_x_final'].reshape(Nx, Ny)
 
-T_tgt, E_in_plane, x_grid, y_grid, z_grid, transmitted_power, incident_power = cost_obj.get_diffraction_and_fields(x, 1)
+T_tgt, E_in_plane, x_grid, y_grid, z_grid, transmitted_power, incident_power, coeffs = cost_obj.get_diffraction_and_fields(x, 1)
 x_up = np.where(gaussian_filter(zoom(x.astype(np.float64), upsampling_ratio, order=1, mode='wrap'), sigma=upsampling_ratio, mode='wrap') > 0.5, 1, 0)
-T_tgt_up, E_in_plane_up, x_grid_up, y_grid_up, z_grid_up, transmitted_power_up, incident_power_up = cost_obj_upsampled.get_diffraction_and_fields(x_up, upsampling_ratio)
+T_tgt_up, E_in_plane_up, x_grid_up, y_grid_up, z_grid_up, transmitted_power_up, incident_power_up, coeffs_up = cost_obj_upsampled.get_diffraction_and_fields(x_up, upsampling_ratio)
 
-print('\n\t*GEGD (ADAM only)', end='', flush=True)
-cost_all_GEGD_ADAM = np.zeros(10)
+print('\n\t*TF-BFGS', end='', flush=True)
+cost_all_BFGS = np.zeros(170)
+cost_all_BFGS_mfs = np.zeros(170)
 for i in range(10):
-    with np.load(directory + "/RCWA_functions/RGB_coupler/GEGD_ADAM_only/RGB_coupler_IPR1_Nensemble20_Ndim60x263_D1_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(i + 1) + "_GEGD_results.npz") as data:
-        cost_all_GEGD_ADAM[i] = data['best_cost_hist'][-1]
-
-idx_best = np.argmin(cost_all_GEGD_ADAM)
-print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GEGD_ADAM[idx_best], flush=True)
-
-print('\n\t*GEGD (preconditioned)', end='', flush=True)
-cost_all_GEGD_pre = np.zeros(10)
-for i in range(10):
-    with np.load(directory + "/RCWA_functions/RGB_coupler/GEGD_preconditioned/RGB_coupler_IPR1_Nensemble20_Ndim60x263_D1_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(i + 1) + "_GEGD_results.npz") as data:
-        cost_all_GEGD_pre[i] = data['best_cost_hist'][-1]
-
-idx_best = np.argmin(cost_all_GEGD_pre)
-print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GEGD_pre[idx_best], flush=True)
-
-print('\n\t*BFGS', end='', flush=True)
-cost_all_BFGS = np.zeros(180)
-cost_all_BFGS_mfs = np.zeros(180)
-for i in range(10):
-    with np.load(directory + "/RCWA_functions/RGB_coupler/BFGS/RGB_coupler_IPR1_Ntrial18_Ndim60x263_D1_mfs7_try" + str(i + 1) + "_TF_results.npz") as data:
-        cost_all_BFGS[18*i:18*(i+1)] = data['cost_fin'][0,:]
-        cost_all_BFGS_mfs[18*i:18*(i+1)] = data['cost_fin'][1,:]
+    with np.load(directory + "/RCWA_functions/RGB_coupler/TF_BFGS/RGB_coupler_IPR1_Ntrial17_Ndim60x263_D1_mfs7_try" + str(i + 1) + "_TF_results.npz") as data:
+        cost_all_BFGS[17*i:17*(i+1)] = data['cost_fin'][0,:]
+        cost_all_BFGS_mfs[17*i:17*(i+1)] = data['cost_fin'][1,:]
 
 idx_best = np.argmin(cost_all_BFGS)
 idx_best_mfs = np.argmin(cost_all_BFGS_mfs)
@@ -161,18 +146,16 @@ idx_best = np.argmin(cost_all_GA)
 print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GA[idx_best], flush=True)
 
 print('\n\t*AF-STE', end='', flush=True)
-cost_all_AF_STE = np.zeros(180)
+cost_all_AF_STE = np.zeros(170)
 for i in range(10):
-    with np.load(directory + "/RCWA_functions/RGB_coupler/AF_STE/RGB_coupler_IPR1_Ntrial18_Ndim60x263_D1_eta0.001_mfs7_try" + str(i + 1) + "_AF_STE_results.npz") as data:
-        cost_all_AF_STE[18*i:18*(i+1)] = np.min(data['cost_hist'], axis=0)
+    with np.load(directory + "/RCWA_functions/RGB_coupler/AF_STE/RGB_coupler_IPR1_Ntrial17_Ndim60x263_D1_eta0.01_mfs7_try" + str(i + 1) + "_AF_STE_results.npz") as data:
+        cost_all_AF_STE[17*i:17*(i+1)] = np.min(data['cost_hist'], axis=0)
 
 idx_best = np.argmin(cost_all_AF_STE)
 print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_AF_STE[idx_best], flush=True)
 
 np.savez(directory + '/RCWA_functions/RGB_coupler/RGB_coupler_IPR1_Nensemble20_Ndim60x263_D1_mfs7_simulations',
     cost_all_GEGD=cost_all_GEGD,
-    cost_all_GEGD_ADAM=cost_all_GEGD_ADAM,
-    cost_all_GEGD_pre=cost_all_GEGD_pre,
     cost_all_BFGS=cost_all_BFGS,
     cost_all_BFGS_mfs=cost_all_BFGS_mfs,
     cost_all_sep_CMA_ES=cost_all_sep_CMA_ES,
@@ -187,6 +170,7 @@ np.savez(directory + '/RCWA_functions/RGB_coupler/RGB_coupler_IPR1_Nensemble20_N
     z_grid=z_grid,
     transmitted_power=transmitted_power,
     incident_power=incident_power,
+    coeffs=coeffs,
     T_tgt_up=T_tgt_up,
     E_in_plane_up=E_in_plane_up,
     x_grid_up=x_grid_up,
@@ -194,6 +178,7 @@ np.savez(directory + '/RCWA_functions/RGB_coupler/RGB_coupler_IPR1_Nensemble20_N
     z_grid_up=z_grid_up,
     transmitted_power_up=transmitted_power_up,
     incident_power_up=incident_power_up,
+    coeffs_up=coeffs_up,
 )
 
 t2 = time.time()

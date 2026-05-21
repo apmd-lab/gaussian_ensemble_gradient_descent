@@ -2,13 +2,14 @@ import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
-sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
+#sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
+sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
 
 import numpy as np
 from scipy.ndimage import gaussian_filter, zoom
 import time
 
-Nthreads = 8
+Nthreads = 20
 cuda_ind = 0
 os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
@@ -59,6 +60,7 @@ cost_obj = objfun.custom_objective(
     mat_pattern,
     diff_order,
     IPR_exponent=1/1,
+    precision='float64',
 )
 
 cost_obj_upsampled = objfun.custom_objective(
@@ -72,6 +74,7 @@ cost_obj_upsampled = objfun.custom_objective(
     mat_pattern,
     diff_order,
     IPR_exponent=1/1,
+    precision='float64',
 )
 
 # Optimizer Settings
@@ -80,8 +83,8 @@ cost_obj_upsampled = objfun.custom_objective(
 # high-fidelity: accuracy required for actual application
 # low-fidelity: faster and less accurate, but accurate enough to ensure high correlation with the high-fidelity simulations
 #--------------------------------------------------------------------------------------------------------------------------
-low_fidelity_setting = 17**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-high_fidelity_setting = 38**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+low_fidelity_setting = 18**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+high_fidelity_setting = 36**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
 cost_obj.set_accuracy(high_fidelity_setting)
 cost_obj_upsampled.set_accuracy(high_fidelity_setting)
 
@@ -107,7 +110,7 @@ T_TE_up, T_TM_up, Ex_up, Ey_up, x_grid_up, y_grid_up, z_grid_up, transmitted_pow
 print('\n\t*GEGD (ADAM only)', end='', flush=True)
 cost_all_GEGD_ADAM = np.zeros(10)
 for i in range(10):
-    with np.load(directory + "/RCWA_functions/polarization_beamsplitter/GEGD_ADAM_only/polarization_beamsplitter_IPR1_Nensemble20_Ndim45x90_D1_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(i + 1) + "_GEGD_results.npz") as data:
+    with np.load(directory + "/RCWA_functions/polarization_beamsplitter/GEGD_momentum/polarization_beamsplitter_IPR1_Nensemble20_Ndim45x90_D1_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(i + 1) + "_GEGD_results.npz") as data:
         cost_all_GEGD_ADAM[i] = data['best_cost_hist'][-1]
 
 idx_best = np.argmin(cost_all_GEGD_ADAM)
@@ -122,11 +125,11 @@ for i in range(10):
 idx_best = np.argmin(cost_all_GEGD_pre)
 print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GEGD_pre[idx_best], flush=True)
 
-print('\n\t*BFGS', end='', flush=True)
+print('\n\t*TF-BFGS', end='', flush=True)
 cost_all_BFGS = np.zeros(180)
 cost_all_BFGS_mfs = np.zeros(180)
 for i in range(10):
-    with np.load(directory + "/RCWA_functions/polarization_beamsplitter/BFGS/polarization_beamsplitter_IPR1_Ntrial18_Ndim45x90_D1_mfs7_try" + str(i + 1) + "_TF_results.npz") as data:
+    with np.load(directory + "/RCWA_functions/polarization_beamsplitter/TF_BFGS/polarization_beamsplitter_IPR1_Ntrial18_Ndim45x90_D1_mfs7_try" + str(i + 1) + "_TF_results.npz") as data:
         cost_all_BFGS[18*i:18*(i+1)] = data['cost_fin'][0,:]
         cost_all_BFGS_mfs[18*i:18*(i+1)] = data['cost_fin'][1,:]
 
@@ -155,7 +158,7 @@ print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GA[idx_best], flush=True)
 print('\n\t*AF-STE', end='', flush=True)
 cost_all_AF_STE = np.zeros(180)
 for i in range(10):
-    with np.load(directory + "/RCWA_functions/polarization_beamsplitter/AF_STE/polarization_beamsplitter_IPR1_Ntrial18_Ndim45x90_D1_eta0.001_mfs7_try" + str(i + 1) + "_AF_STE_results.npz") as data:
+    with np.load(directory + "/RCWA_functions/polarization_beamsplitter/AF_STE/polarization_beamsplitter_IPR1_Ntrial18_Ndim45x90_D1_eta0.01_mfs7_try" + str(i + 1) + "_AF_STE_results.npz") as data:
         cost_all_AF_STE[18*i:18*(i+1)] = np.min(data['cost_hist'], axis=0)
 
 idx_best = np.argmin(cost_all_AF_STE)

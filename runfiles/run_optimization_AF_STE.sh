@@ -1,12 +1,12 @@
 #!/bin/bash
 
 #SBATCH -o slurm/run_optimization.log-%j
-#SBATCH --partition=gpu_only
+#SBATCH --partition=cac_gpu
 #SBATCH --job-name=ens_opt
 ##SBATCH --exclusive
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
-#SBATCH --gres=gpu:h100:1
+#SBATCH --gres=gpu:h100pcie:1
 #SBATCH --time=24:00:00
 
 export OMP_NUM_THREADS=20
@@ -20,7 +20,7 @@ source activate gegd_dev
 module load cuda/12.9
 
 ## Polarization Beamsplitter -----------------------------------------------------
-##: << 'END_COMMENT'
+: << 'END_COMMENT'
 python run_optimization_polarization_beamsplitter.py \
     --Nthreads 20 \
     --n_seed 9 \
@@ -35,14 +35,14 @@ python run_optimization_polarization_beamsplitter.py \
     --min_feature_size 7 \
     --eta 0.01 \
     --precision 'float64'
-##END_COMMENT
+END_COMMENT
 
 ## RGB Coupler -----------------------------------------------------
 : << 'END_COMMENT'
 python run_optimization_RGB_coupler.py \
-    --Nthreads 5 \
-    --n_seed 9 \
-    --load_data 1 \
+    --Nthreads 20 \
+    --n_seed 1 \
+    --load_data 0 \
     --optimizer 'AF_STE' \
     --Nensemble 20 \
     --Nx 60 \
@@ -51,15 +51,16 @@ python run_optimization_RGB_coupler.py \
     --upsample_ratio 1 \
     --maxiter 400 \
     --min_feature_size 7 \
-    --eta 0.01
+    --eta 0.01 \
+    --precision 'float64'
 END_COMMENT
 
 ## RGB Color Router -----------------------------------------------------
-: << 'END_COMMENT'
+##: << 'END_COMMENT'
 python run_optimization_RGB_color_router.py \
-    --Nthreads 5 \
+    --Nthreads 20 \
     --n_seed 9 \
-    --load_data 0 \
+    --load_data 1 \
     --optimizer 'AF_STE' \
     --Nensemble 20 \
     --Nx 100 \
@@ -68,5 +69,6 @@ python run_optimization_RGB_color_router.py \
     --upsample_ratio 1 \
     --maxiter 400 \
     --min_feature_size 7 \
-    --eta 0.01
-END_COMMENT
+    --eta 0.01 \
+    --precision 'float64'
+##END_COMMENT

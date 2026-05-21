@@ -362,8 +362,8 @@ class custom_objective:
         flux_per_quadrant = jnp.mean(mask * flux[:,:,:,jnp.newaxis], axis=(-3, -2))
         flux_per_quadrant /= self.incident_flux
 
-        R_flux = flux_per_quadrant[0,0]
-        G_flux = jnp.sum(flux_per_quadrant[1,[1,2]])
-        B_flux = flux_per_quadrant[2,3]
+        R_flux = flux_per_quadrant[:,0]
+        G_flux = jnp.sum(flux_per_quadrant[:,[1,2]], axis=1)
+        B_flux = flux_per_quadrant[:,3]
 
         return flux, R_flux, G_flux, B_flux, self.incident_flux

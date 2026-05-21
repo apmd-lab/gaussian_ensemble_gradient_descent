@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH -o slurm/run_optimization.log-%j
-#SBATCH --partition=gpu_only
+#SBATCH --partition=cac_gpu
 #SBATCH --job-name=ens_opt
 ##SBATCH --exclusive
 #SBATCH --ntasks=1
@@ -20,7 +20,7 @@ source activate gegd_dev
 module load cuda/12.9
 
 ## Polarization Beamsplitter -----------------------------------------------------
-##: << 'END_COMMENT'
+: << 'END_COMMENT'
 python run_optimization_polarization_beamsplitter.py \
     --Nthreads 32 \
     --n_seed 9 \
@@ -37,14 +37,14 @@ python run_optimization_polarization_beamsplitter.py \
     --eta 5e-5 \
     --min_feature_size 7 \
     --precision 'float64'
-##END_COMMENT
+END_COMMENT
 
 ## RGB Coupler -----------------------------------------------------
 : << 'END_COMMENT'
 python run_optimization_RGB_coupler.py \
-    --Nthreads 8 \
+    --Nthreads 32 \
     --n_seed 9 \
-    --load_data 0 \
+    --load_data 1 \
     --optimizer 'GEGD' \
     --Nensemble 20 \
     --Nx 60 \
@@ -55,14 +55,15 @@ python run_optimization_RGB_coupler.py \
     --maxiter 400 \
     --sigma_ensemble 1e-2 \
     --eta 5e-5 \
-    --min_feature_size 7
+    --min_feature_size 7 \
+    --precision 'float64'
 END_COMMENT
 
 ## RGB Color Router -----------------------------------------------------
-: << 'END_COMMENT'
+##: << 'END_COMMENT'
 python run_optimization_RGB_color_router.py \
-    --Nthreads 5 \
-    --n_seed 10 \
+    --Nthreads 32 \
+    --n_seed 0 \
     --load_data 0 \
     --optimizer 'GEGD' \
     --Nensemble 20 \
@@ -74,5 +75,6 @@ python run_optimization_RGB_color_router.py \
     --maxiter 400 \
     --sigma_ensemble 1e-2 \
     --eta 5e-5 \
-    --min_feature_size 7
-END_COMMENT
+    --min_feature_size 7 \
+    --precision 'float64'
+##END_COMMENT

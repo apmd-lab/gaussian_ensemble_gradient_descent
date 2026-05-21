@@ -116,12 +116,12 @@ cost_obj_low_fidelity = objfun.custom_objective(
 # high-fidelity: accuracy required for actual application
 # low-fidelity: faster and less accurate, but accurate enough to ensure high correlation with the high-fidelity simulations
 #--------------------------------------------------------------------------------------------------------------------------
-low_fidelity_setting = 16**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-high_fidelity_setting = 34**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-t_low_fidelity = 0.380 # low-fidelity simulation time in seconds
-t_high_fidelity = 4.160 # high-fidelity simulation time in seconds
+low_fidelity_setting = 18**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+high_fidelity_setting = 40**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+t_low_fidelity = 0.52 # low-fidelity simulation time in seconds
+t_high_fidelity = 6.06 # high-fidelity simulation time in seconds
 t_iteration = t_high_fidelity*Nensemble # target time per optimization iteration in seconds (actual time may be slightly longer due to the brush generator)
-t_fwd_AD = 4.992
+t_fwd_AD = 6.78
 
 cost_obj_high_fidelity.set_accuracy(high_fidelity_setting)
 cost_obj_low_fidelity.set_accuracy(low_fidelity_setting)

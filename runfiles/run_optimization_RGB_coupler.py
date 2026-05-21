@@ -125,11 +125,11 @@ cost_obj_low_fidelity = objfun.custom_objective(
 # low-fidelity: faster and less accurate, but accurate enough to ensure high correlation with the high-fidelity simulations
 #--------------------------------------------------------------------------------------------------------------------------
 low_fidelity_setting = 24**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-high_fidelity_setting = 50**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-t_low_fidelity = 0.85 # low-fidelity simulation time in seconds
-t_high_fidelity = 10.8 # high-fidelity simulation time in seconds
+high_fidelity_setting = 46**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+t_low_fidelity = 1.13 # low-fidelity simulation time in seconds
+t_high_fidelity = 10.30 # high-fidelity simulation time in seconds
 t_iteration = t_high_fidelity*Nensemble # target time per optimization iteration in seconds (actual time may be slightly longer due to the brush generator)
-t_fwd_AD = 13.0
+t_fwd_AD = 11.89
 
 cost_obj_high_fidelity.set_accuracy(high_fidelity_setting)
 cost_obj_low_fidelity.set_accuracy(low_fidelity_setting)
@@ -212,12 +212,12 @@ elif optimization_algorithm == 'GEGD':
         upsample_ratio=upsample_ratio,
         beta_proj=beta_proj,
         feasible_design_generation_method=feasible_design_generation_method,
-        covariance_type='constant', #gaussian_constant
+        covariance_type='gaussian_constant', #gaussian_constant
         coeff_exp=coeff_exp,
         cost_threshold=cost_threshold,
         cost_obj_high_fidelity=cost_obj_high_fidelity,
         cost_obj_low_fidelity=cost_obj_low_fidelity,
-        use_ctrlVar=False,
+        use_ctrlVar=True,
         Nthreads=Nthreads,
         cuda_ind=cuda_ind,
         verbosity=1,

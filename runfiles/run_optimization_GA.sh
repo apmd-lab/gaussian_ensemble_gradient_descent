@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH -o slurm/run_optimization.log-%j
-#SBATCH --partition=gpu_only
+#SBATCH --partition=cac_gpu
 #SBATCH --job-name=ens_opt
 ##SBATCH --exclusive
 #SBATCH --ntasks=1
@@ -37,11 +37,11 @@ python run_optimization_polarization_beamsplitter.py \
 END_COMMENT
 
 ## RGB Coupler -----------------------------------------------------
-##: << 'END_COMMENT'
+: << 'END_COMMENT'
 python run_optimization_RGB_coupler.py \
     --Nthreads 20 \
-    --n_seed 0 \
-    --load_data 0 \
+    --n_seed 5 \
+    --load_data 1 \
     --optimizer 'AF_GA' \
     --Nensemble 20 \
     --Nx 60 \
@@ -51,12 +51,12 @@ python run_optimization_RGB_coupler.py \
     --maxiter 400 \
     --min_feature_size 7 \
     --precision 'float64'
-##END_COMMENT
+END_COMMENT
 
 ## RGB Color Router -----------------------------------------------------
-: << 'END_COMMENT'
+##: << 'END_COMMENT'
 python run_optimization_RGB_color_router.py \
-    --Nthreads 5 \
+    --Nthreads 20 \
     --n_seed 9 \
     --load_data 0 \
     --optimizer 'AF_GA' \
@@ -68,4 +68,4 @@ python run_optimization_RGB_color_router.py \
     --maxiter 400 \
     --min_feature_size 7 \
     --precision 'float64'
-END_COMMENT
+##END_COMMENT

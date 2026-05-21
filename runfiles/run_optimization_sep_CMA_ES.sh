@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH -o slurm/run_optimization.log-%j
-#SBATCH --partition=gpu_only
+#SBATCH --partition=cac_gpu
 #SBATCH --job-name=ens_opt
 ##SBATCH --exclusive
 #SBATCH --ntasks=1
@@ -20,7 +20,7 @@ source activate gegd_dev
 module load cuda/12.9
 
 ## Polarization Beamsplitter -----------------------------------------------------
-##: << 'END_COMMENT'
+: << 'END_COMMENT'
 python run_optimization_polarization_beamsplitter.py \
     --Nthreads 20 \
     --n_seed 9 \
@@ -34,7 +34,7 @@ python run_optimization_polarization_beamsplitter.py \
     --maxiter 400 \
     --min_feature_size 7 \
     --precision 'float64'
-##END_COMMENT
+END_COMMENT
 
 ## RGB Coupler -----------------------------------------------------
 : << 'END_COMMENT'
@@ -54,10 +54,10 @@ python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimiz
 END_COMMENT
 
 ## RGB Color Router -----------------------------------------------------
-: << 'END_COMMENT'
+##: << 'END_COMMENT'
 python run_optimization_RGB_color_router.py \
-    --Nthreads 5 \
-    --n_seed 0 \
+    --Nthreads 20 \
+    --n_seed 8 \
     --load_data 0 \
     --optimizer 'sep_CMA_ES' \
     --Nensemble 20 \
@@ -68,4 +68,4 @@ python run_optimization_RGB_color_router.py \
     --maxiter 400 \
     --min_feature_size 7 \
     --precision 'float64'
-END_COMMENT
+##END_COMMENT
