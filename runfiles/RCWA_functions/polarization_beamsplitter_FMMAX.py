@@ -46,6 +46,11 @@ class custom_objective:
         
         mat_type = list(set(np.hstack((mat_pattern, mat_background))))
         raw_wavelength, mat_dict = rmd.load_all(1e3*lam, 'n_k', mat_type)
+        ##print('\n### Refractive Indices:', flush=True)
+        ##for key, val in mat_dict.items():
+        ##    print('\t', key, val[0], flush=True)
+        ##print('\n', flush=True)
+        ##assert False
 
         self.eps_incident_medium = jnp.asarray(mat_dict[mat_background[0]]**2, dtype=self.dtype_complex)[:,jnp.newaxis,jnp.newaxis] # freq, x, y
         self.eps_substrate = jnp.asarray(mat_dict[mat_background[1]]**2, dtype=self.dtype_complex)[:,jnp.newaxis,jnp.newaxis]

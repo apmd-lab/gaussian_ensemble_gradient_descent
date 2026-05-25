@@ -63,7 +63,7 @@ END_COMMENT
 ##: << 'END_COMMENT'
 python run_optimization_RGB_color_router.py \
     --Nthreads 32 \
-    --n_seed 0 \
+    --n_seed 1 \
     --load_data 0 \
     --optimizer 'GEGD' \
     --Nensemble 20 \

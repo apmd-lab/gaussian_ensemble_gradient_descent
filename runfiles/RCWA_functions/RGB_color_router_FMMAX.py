@@ -48,6 +48,9 @@ class custom_objective:
         self.n_freq = lam.size
         self.lam = jnp.asarray(lam, dtype=self.dtype_real)
         self.freq = jnp.asarray(1/lam, dtype=self.dtype_real)
+        self.mask_B = (self.lam > 0.4) & (self.lam < 0.5)
+        self.mask_G = (self.lam > 0.5) & (self.lam < 0.6)
+        self.mask_R = (self.lam > 0.6) & (self.lam < 0.7)
         
         mat_type = list(set(np.hstack((mat_pattern, mat_background, mat_substrate))))
         raw_wavelength, mat_dict = rmd.load_all(1e3*lam, 'n_k', mat_type)
@@ -183,6 +186,9 @@ class custom_objective:
         # Local variables to capture (to ensure they are treated as constants/arrays by JIT)
         Nx = self.Nx
         Ny = self.Ny
+        mask_R = self.mask_R
+        mask_G = self.mask_G
+        mask_B = self.mask_B
 
         eps_incident = self.eps_incident_medium
         eps_substrate = self.eps_substrate
@@ -275,9 +281,9 @@ class custom_objective:
             flux_per_quadrant = jnp.mean(mask * flux[:,:,:,jnp.newaxis], axis=(-3, -2))
             flux_per_quadrant /= incident_flux
     
-            R_flux = flux_per_quadrant[0,0]
-            G_flux = jnp.sum(flux_per_quadrant[1,[1,2]])
-            B_flux = flux_per_quadrant[2,3]
+            R_flux = jnp.sum(flux_per_quadrant[mask_R,0])/jnp.sum(mask_R)
+            G_flux = jnp.sum(flux_per_quadrant[mask_G,:][:,[1,2]])/jnp.sum(mask_G)
+            B_flux = jnp.sum(flux_per_quadrant[mask_B,3])/jnp.sum(mask_B)
 
             cost = -(R_flux**IPR_exponent + G_flux**IPR_exponent + B_flux**IPR_exponent) / 3
             
@@ -286,7 +292,7 @@ class custom_objective:
         self._jitted_cost_fn = jax.jit(_pure_cost_fn)
         self._jitted_grad_fn = jax.jit(jax.value_and_grad(_pure_cost_fn))
     
-    def get_detector_flux(self, x):
+    def get_detector_flux(self, x, upsampling_ratio):
         if x.ndim == 1:
             density = jnp.asarray(x, dtype=self.dtype_real).reshape((self.Nx, self.Ny))
         else:
@@ -345,15 +351,15 @@ class custom_objective:
             electric_field=Ef,
             magnetic_field=Hf,
             layer_solve_result=layer_solve_results[-1],
-            shape=(self.Nx, self.Ny),
+            shape=(self.Nx * upsampling_ratio, self.Ny * upsampling_ratio),
             num_unit_cells=(1, 1),
         )
 
         flux = 0.5 * jnp.real(Ex * jnp.conj(Hy) - Ey * jnp.conj(Hx))[:,:,:,0]
 
-        mask = jnp.zeros((1, self.Nx, self.Ny, 4))
-        xdim = self.Nx // 2
-        ydim = self.Ny // 2
+        mask = jnp.zeros((1, self.Nx * upsampling_ratio, self.Ny * upsampling_ratio, 4))
+        xdim = self.Nx * upsampling_ratio // 2
+        ydim = self.Ny * upsampling_ratio // 2
         mask = mask.at[0,:xdim,:ydim,0].set(1)
         mask = mask.at[0,:xdim,ydim:,1].set(1)
         mask = mask.at[0,xdim:,:ydim,2].set(1)

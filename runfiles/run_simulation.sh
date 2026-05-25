@@ -7,7 +7,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
 #SBATCH --gres=gpu:h100pcie:1
-#SBATCH --time=1:00:00
+#SBATCH --time=24:00:00
 
 export OMP_NUM_THREADS=20
 export OPENBLAS_NUM_THREADS=20
@@ -19,6 +19,8 @@ unset PYTHONPATH PYTHONHOME
 source activate gegd_dev
 module load cuda/12.9
 
-##python simulate_optimized_polarization_beamsplitter.py
+export XLA_PYTHON_CLIENT_PREALLOCATE=false
+
+python simulate_optimized_polarization_beamsplitter.py
 ##python simulate_optimized_RGB_coupler.py
-python simulate_optimized_RGB_color_router.py
+##python simulate_optimized_RGB_color_router.py

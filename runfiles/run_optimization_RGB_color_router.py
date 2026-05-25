@@ -64,7 +64,7 @@ import RCWA_functions.RGB_color_router_FMMAX as objfun
 
 IPR_exponent = 1/1
 
-lam = np.array([0.650,0.550,0.450]) # um
+lam = np.array([0.675,0.650,0.625,0.575,0.550,0.525,0.475,0.450,0.425]) # um
 theta_inc = np.array([0])*np.pi/180
 phi_inc = np.array([0])*np.pi/180
 in_plane_wavevector = np.array([0.0, 0.0])
@@ -116,12 +116,12 @@ cost_obj_low_fidelity = objfun.custom_objective(
 # high-fidelity: accuracy required for actual application
 # low-fidelity: faster and less accurate, but accurate enough to ensure high correlation with the high-fidelity simulations
 #--------------------------------------------------------------------------------------------------------------------------
-low_fidelity_setting = 18**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-high_fidelity_setting = 40**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-t_low_fidelity = 0.52 # low-fidelity simulation time in seconds
-t_high_fidelity = 6.06 # high-fidelity simulation time in seconds
+low_fidelity_setting = 17**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+high_fidelity_setting = 37**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+t_low_fidelity = 1.54 # low-fidelity simulation time in seconds
+t_high_fidelity = 15.80 # high-fidelity simulation time in seconds
 t_iteration = t_high_fidelity*Nensemble # target time per optimization iteration in seconds (actual time may be slightly longer due to the brush generator)
-t_fwd_AD = 6.78
+t_fwd_AD = 17.95
 
 cost_obj_high_fidelity.set_accuracy(high_fidelity_setting)
 cost_obj_low_fidelity.set_accuracy(low_fidelity_setting)

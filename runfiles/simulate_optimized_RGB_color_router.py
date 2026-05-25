@@ -36,7 +36,10 @@ import RCWA_functions.RGB_color_router_FMMAX as objfun
 
 IPR_exponent = 1/1
 
-lam = np.linspace(0.400, 0.700, 301) #np.array([0.650,0.550,0.450]) # um
+# Offset by 0.2 nm to avoid Rayleigh-Wood anomalies at λ = period/√(m²+n²)
+# (e.g., λ = 0.500 µm for period = 1.0 µm, orders ±2,0 in air)
+# which cause singular eigensolve matrices in RCWA.
+lam = np.linspace(0.400, 0.700, 301) + 2e-4  # um
 theta_inc = np.array([0])*np.pi/180
 phi_inc = np.array([0])*np.pi/180
 in_plane_wavevector = np.array([0.0, 0.0])
@@ -60,7 +63,7 @@ low_fidelity_setting = 18**2 # low-fidelity simulation setting (e.g. RCWA: numbe
 high_fidelity_setting = 40**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
 
 # Process wavelengths in chunks to limit GPU memory usage
-lam_chunk_size = 5
+lam_chunk_size = 3
 
 def simulate_chunked(design, upsampling_ratio_arg):
     """Run get_diffraction_and_fields over lam in chunks and concatenate results."""
@@ -92,15 +95,24 @@ def simulate_chunked(design, upsampling_ratio_arg):
         )
         obj.set_accuracy(high_fidelity_setting)
 
-        f, Rf, Gf, Bf, inc_f = obj.get_diffraction_and_fields(design, upsampling_ratio_arg)
-        flux_chunks.append(np.asarray(f))
-        R_flux_chunks.append(np.asarray(Rf))
-        G_flux_chunks.append(np.asarray(Gf))
-        B_flux_chunks.append(np.asarray(Bf))
-        incident_flux_chunks.append(np.asarray(inc_f))
+        f, Rf, Gf, Bf, inc_f = obj.get_detector_flux(design, upsampling_ratio_arg)
 
-        # Free GPU memory before next chunk
+        # Convert to numpy immediately to release JAX array references
+        f_np = np.asarray(f)
+        Rf_np = np.asarray(Rf)
+        Gf_np = np.asarray(Gf)
+        Bf_np = np.asarray(Bf)
+        inc_f_np = np.asarray(inc_f)
+
+        flux_chunks.append(f_np)
+        R_flux_chunks.append(Rf_np)
+        G_flux_chunks.append(Gf_np)
+        B_flux_chunks.append(Bf_np)
+        incident_flux_chunks.append(inc_f_np)
+
+        # Aggressively free GPU memory before next chunk
         del obj, f, Rf, Gf, Bf, inc_f
+        del f_np, Rf_np, Gf_np, Bf_np, inc_f_np
         jax.clear_caches()
         gc.collect()
 
@@ -126,17 +138,17 @@ print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GEGD[idx_best], flush=Tru
 
 with np.load(directory + "/RCWA_functions/RGB_color_router/GEGD/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(idx_best + 1) + "_GEGD_results.npz") as data:
     x = data['best_x_final'].reshape(Nx, Ny)
-'''
+
 print('\n\t  Simulating native resolution...', flush=True)
 flux, R_flux, G_flux, B_flux, incident_flux = simulate_chunked(x, 1)
 x_up = np.where(gaussian_filter(zoom(x.astype(np.float64), upsampling_ratio, order=1, mode='wrap'), sigma=upsampling_ratio, mode='wrap') > 0.5, 1, 0)
 print('\n\t  Simulating upsampled resolution...', flush=True)
 flux_up, R_flux_up, G_flux_up, B_flux_up, incident_flux_up = simulate_chunked(x_up, upsampling_ratio)
-'''
+
 print('\n\t*TF-BFGS', end='', flush=True)
-cost_all_BFGS = np.zeros(108)
-cost_all_BFGS_mfs = np.zeros(108)
-for i in range(6):
+cost_all_BFGS = np.zeros(180)
+cost_all_BFGS_mfs = np.zeros(180)
+for i in range(10):
     with np.load(directory + "/RCWA_functions/RGB_color_router/TF_BFGS/RGB_color_router_IPR1_Ntrial18_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_TF_results.npz") as data:
         cost_all_BFGS[18*i:18*(i+1)] = data['cost_fin'][0,:]
         cost_all_BFGS_mfs[18*i:18*(i+1)] = data['cost_fin'][1,:]
@@ -164,8 +176,8 @@ idx_best = np.argmin(cost_all_GA)
 print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GA[idx_best], flush=True)
 
 print('\n\t*AF-STE', end='', flush=True)
-cost_all_AF_STE = np.zeros(144)
-for i in range(8):
+cost_all_AF_STE = np.zeros(180)
+for i in range(10):
     with np.load(directory + "/RCWA_functions/RGB_color_router/AF_STE/RGB_color_router_IPR1_Ntrial18_Ndim100x100_D3_eta0.01_mfs7_try" + str(i + 1) + "_AF_STE_results.npz") as data:
         cost_all_AF_STE[18*i:18*(i+1)] = np.min(data['cost_hist'], axis=0)
 
@@ -181,8 +193,6 @@ np.savez(directory + '/RCWA_functions/RGB_color_router/RGB_color_router_IPR1_Nen
     cost_all_AF_STE=cost_all_AF_STE,
     lam=lam,
     x=x,
-)
-'''
     x_up=x_up,
     flux=flux,
     R_flux=R_flux,
@@ -195,7 +205,6 @@ np.savez(directory + '/RCWA_functions/RGB_color_router/RGB_color_router_IPR1_Nen
     B_flux_up=B_flux_up,
     incident_flux_up=incident_flux_up,
 )
-'''
 
 t2 = time.time()
 print('>>> Time taken: ' + str(np.round(t2 - t1, 2)) + ' s', flush=True)

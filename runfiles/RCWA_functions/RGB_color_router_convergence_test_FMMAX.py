@@ -6,7 +6,7 @@ import sys
 #sys.path.append('/ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent')
 sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
 
-Nthreads = 100
+Nthreads = 20
 cuda_ind = 0
 os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
 #os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
@@ -50,7 +50,7 @@ elif symmetry == 4:
 #----------------------------------------------------------
 import RGB_color_router_FMMAX as objfun
 
-lam = np.array([0.650,0.550,0.450]) # um
+lam = np.array([0.675,0.650,0.625,0.575,0.550,0.525,0.475,0.450,0.425]) # um
 theta_inc = np.array([0])*np.pi/180
 phi_inc = np.array([0])*np.pi/180
 in_plane_wavevector = np.array([0.0, 0.0])
@@ -106,7 +106,7 @@ brush_time = t2 - t1
 
 load_data = False
 
-n_harmonic = np.arange(2, 49)**2
+n_harmonic = np.arange(2, 37)**2
 
 cost_all = np.zeros((n_struct, n_harmonic.size))
 sim_time = np.zeros((n_struct, n_harmonic.size))
