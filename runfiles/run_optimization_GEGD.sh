@@ -1,23 +1,22 @@
 #!/bin/bash
 
 #SBATCH -o slurm/run_optimization.log-%j
-#SBATCH --partition=cac_gpu
+#SBATCH --partition=GPU-shared
 #SBATCH --job-name=ens_opt
 ##SBATCH --exclusive
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=32
-#SBATCH --gres=gpu:h100:1
-#SBATCH --time=24:00:00
+#SBATCH --cpus-per-task=10
+#SBATCH --gres=gpu:h100-80:1
+#SBATCH --time=48:00:00
 
-export OMP_NUM_THREADS=32
-export OPENBLAS_NUM_THREADS=32
-export MKL_NUM_THREADS=32
-export NUMEXPR_NUM_THREADS=32
+export OMP_NUM_THREADS=10
+export OPENBLAS_NUM_THREADS=10
+export MKL_NUM_THREADS=10
+export NUMEXPR_NUM_THREADS=10
 
 module load anaconda3
-unset PYTHONPATH PYTHONHOME
 source activate gegd_dev
-module load cuda/12.9
+module load cuda/12.6
 
 ## Polarization Beamsplitter -----------------------------------------------------
 : << 'END_COMMENT'
@@ -63,7 +62,7 @@ END_COMMENT
 ##: << 'END_COMMENT'
 python run_optimization_RGB_color_router.py \
     --Nthreads 32 \
-    --n_seed 1 \
+    --n_seed 9 \
     --load_data 0 \
     --optimizer 'GEGD' \
     --Nensemble 20 \
