@@ -60,7 +60,7 @@ END_COMMENT
 python run_optimization_RGB_color_router.py \
     --Nthreads 20 \
     --n_seed 9 \
-    --load_data 1 \
+    --load_data 0 \
     --optimizer 'AF_STE' \
     --Nensemble 20 \
     --Nx 100 \

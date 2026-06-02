@@ -6,8 +6,8 @@
 ##SBATCH --exclusive
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
-#SBATCH --gres=gpu:a100:1
-#SBATCH --time=24:00:00
+#SBATCH --gres=gpu:h100:1
+#SBATCH --time=16:00:00
 
 export OMP_NUM_THREADS=20
 export OPENBLAS_NUM_THREADS=20
@@ -57,8 +57,8 @@ END_COMMENT
 ##: << 'END_COMMENT'
 python run_optimization_RGB_color_router.py \
     --Nthreads 20 \
-    --n_seed 3 \
-    --load_data 0 \
+    --n_seed 9 \
+    --load_data 1 \
     --optimizer 'TF_BFGS' \
     --Nensemble 20 \
     --Nx 100 \

@@ -3,8 +3,8 @@ directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
 #sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
-sys.path.append('/ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent/runfiles')
-#sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent/runfiles')
+#sys.path.append('/ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent/runfiles')
+sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent/runfiles')
 
 from typing import Any, Callable, Dict, List, Optional, Tuple
 

@@ -57,7 +57,7 @@ END_COMMENT
 ##: << 'END_COMMENT'
 python run_optimization_RGB_color_router.py \
     --Nthreads 20 \
-    --n_seed 8 \
+    --n_seed 0 \
     --load_data 0 \
     --optimizer 'sep_CMA_ES' \
     --Nensemble 20 \
