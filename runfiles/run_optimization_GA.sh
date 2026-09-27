@@ -1,23 +1,24 @@
 #!/bin/bash
 
 #SBATCH -o slurm/run_optimization.log-%j
-#SBATCH --partition=cac_gpu
+#SBATCH --partition=ghx4
 #SBATCH --job-name=ens_opt
 ##SBATCH --exclusive
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
-#SBATCH --gres=gpu:h100:1
-#SBATCH --time=12:00:00
+##SBATCH --gres=gpu:h100:1
+#SBATCH --gpus-per-node=1
+#SBATCH --time=48:00:00
+#SBATCH --account=bhkk-dtai-gh
 
 export OMP_NUM_THREADS=20
 export OPENBLAS_NUM_THREADS=20
 export MKL_NUM_THREADS=20
 export NUMEXPR_NUM_THREADS=20
 
-module load anaconda3
-unset PYTHONPATH PYTHONHOME
-source activate gegd_dev
-module load cuda/12.9
+module load python/miniforge3_pytorch/2.11.0
+conda activate base
+source /work/nvme/bhkk/smin2/myenv/bin/activate
 
 ## Polarization Beamsplitter -----------------------------------------------------
 : << 'END_COMMENT'
@@ -57,7 +58,7 @@ END_COMMENT
 ##: << 'END_COMMENT'
 python run_optimization_RGB_color_router.py \
     --Nthreads 20 \
-    --n_seed 4 \
+    --n_seed 9 \
     --load_data 0 \
     --optimizer 'AF_GA' \
     --Nensemble 20 \

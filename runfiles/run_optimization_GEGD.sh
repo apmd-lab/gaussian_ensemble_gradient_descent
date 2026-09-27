@@ -1,22 +1,24 @@
 #!/bin/bash
 
 #SBATCH -o slurm/run_optimization.log-%j
-#SBATCH --partition=GPU-shared
+#SBATCH --partition=ghx4
 #SBATCH --job-name=ens_opt
 ##SBATCH --exclusive
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=10
-#SBATCH --gres=gpu:h100-80:1
-#SBATCH --time=48:00:00
+##SBATCH --gres=gpu:h100-80:1
+#SBATCH --gpus-per-node=1
+#SBATCH --time=24:00:00
+#SBATCH --account=bhkk-dtai-gh
 
-export OMP_NUM_THREADS=10
-export OPENBLAS_NUM_THREADS=10
-export MKL_NUM_THREADS=10
-export NUMEXPR_NUM_THREADS=10
+export OMP_NUM_THREADS=72
+export OPENBLAS_NUM_THREADS=72
+export MKL_NUM_THREADS=72
+export NUMEXPR_NUM_THREADS=72
 
-module load anaconda3
-source activate gegd_dev
-module load cuda/12.6
+module load python/miniforge3_pytorch/2.11.0
+conda activate base
+source /work/nvme/bhkk/smin2/myenv/bin/activate
 
 ## Polarization Beamsplitter -----------------------------------------------------
 : << 'END_COMMENT'
@@ -61,8 +63,8 @@ END_COMMENT
 ## RGB Color Router -----------------------------------------------------
 ##: << 'END_COMMENT'
 python run_optimization_RGB_color_router.py \
-    --Nthreads 32 \
-    --n_seed 9 \
+    --Nthreads 72 \
+    --n_seed 0 \
     --load_data 0 \
     --optimizer 'GEGD' \
     --Nensemble 20 \

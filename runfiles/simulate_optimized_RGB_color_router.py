@@ -2,7 +2,8 @@ import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
-sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
+#sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
+sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent')
 
 import gc
 import jax
@@ -50,7 +51,7 @@ thickness_pattern = 0.7
 thickness_substrate = 1.0
 
 mat_background = np.array(['Air']) # background (incident side)
-mat_pattern = np.array(['Air','Si3N4_Luke']) # Low RI, High RI
+mat_pattern = np.array(['Air','TiO2_Sarkar']) # Low RI, High RI
 mat_substrate = np.array(['Si_Schinke_Shkondin'])
 
 # Optimizer Settings
@@ -59,11 +60,11 @@ mat_substrate = np.array(['Si_Schinke_Shkondin'])
 # high-fidelity: accuracy required for actual application
 # low-fidelity: faster and less accurate, but accurate enough to ensure high correlation with the high-fidelity simulations
 #--------------------------------------------------------------------------------------------------------------------------
-low_fidelity_setting = 18**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-high_fidelity_setting = 40**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+low_fidelity_setting = 17**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+high_fidelity_setting = 37**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
 
 # Process wavelengths in chunks to limit GPU memory usage
-lam_chunk_size = 3
+lam_chunk_size = 9
 
 def simulate_chunked(design, upsampling_ratio_arg):
     """Run get_diffraction_and_fields over lam in chunks and concatenate results."""
@@ -130,13 +131,13 @@ print('### Running Simulations', flush=True)
 print('\n\t*GEGD', end='', flush=True)
 cost_all_GEGD = np.zeros(10)
 for i in range(10):
-    with np.load(directory + "/RCWA_functions/RGB_color_router/GEGD/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(i + 1) + "_GEGD_results.npz") as data:
+    with np.load(directory + "/RCWA_functions/RGB_color_router_broadband/GEGD/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(i + 1) + "_GEGD_results.npz") as data:
         cost_all_GEGD[i] = data['best_cost_hist'][-1]
 
 idx_best = np.argmin(cost_all_GEGD)
 print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GEGD[idx_best], flush=True)
 
-with np.load(directory + "/RCWA_functions/RGB_color_router/GEGD/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(idx_best + 1) + "_GEGD_results.npz") as data:
+with np.load(directory + "/RCWA_functions/RGB_color_router_broadband/GEGD/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(idx_best + 1) + "_GEGD_results.npz") as data:
     x = data['best_x_final'].reshape(Nx, Ny)
 
 print('\n\t  Simulating native resolution...', flush=True)
@@ -149,7 +150,7 @@ print('\n\t*TF-BFGS', end='', flush=True)
 cost_all_BFGS = np.zeros(180)
 cost_all_BFGS_mfs = np.zeros(180)
 for i in range(10):
-    with np.load(directory + "/RCWA_functions/RGB_color_router/TF_BFGS/RGB_color_router_IPR1_Ntrial18_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_TF_results.npz") as data:
+    with np.load(directory + "/RCWA_functions/RGB_color_router_broadband/TF_BFGS/RGB_color_router_IPR1_Ntrial18_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_TF_results.npz") as data:
         cost_all_BFGS[18*i:18*(i+1)] = data['cost_fin'][0,:]
         cost_all_BFGS_mfs[18*i:18*(i+1)] = data['cost_fin'][1,:]
 
@@ -160,7 +161,7 @@ print(' --> Best Cost (idx=',idx_best+1,', idx_best_mfs=',idx_best_mfs,'): ',cos
 print('\n\t*sep-CMA-ES', end='', flush=True)
 cost_all_sep_CMA_ES = np.zeros(10)
 for i in range(10):
-    with np.load(directory + "/RCWA_functions/RGB_color_router/sep_CMA_ES/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_sep_CMA_ES_results.npz") as data:
+    with np.load(directory + "/RCWA_functions/RGB_color_router_broadband/sep_CMA_ES/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_sep_CMA_ES_results.npz") as data:
         cost_all_sep_CMA_ES[i] = data['best_cost_hist'][-1]
 
 idx_best = np.argmin(cost_all_sep_CMA_ES)
@@ -169,7 +170,7 @@ print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_sep_CMA_ES[idx_best], flu
 print('\n\t*GA', end='', flush=True)
 cost_all_GA = np.zeros(10)
 for i in range(10):
-    with np.load(directory + "/RCWA_functions/RGB_color_router/GA/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_AF_GA_results.npz") as data:
+    with np.load(directory + "/RCWA_functions/RGB_color_router_broadband/GA/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_AF_GA_results.npz") as data:
         cost_all_GA[i] = data['best_cost_hist'][-1]
 
 idx_best = np.argmin(cost_all_GA)
@@ -178,13 +179,13 @@ print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GA[idx_best], flush=True)
 print('\n\t*AF-STE', end='', flush=True)
 cost_all_AF_STE = np.zeros(180)
 for i in range(10):
-    with np.load(directory + "/RCWA_functions/RGB_color_router/AF_STE/RGB_color_router_IPR1_Ntrial18_Ndim100x100_D3_eta0.01_mfs7_try" + str(i + 1) + "_AF_STE_results.npz") as data:
+    with np.load(directory + "/RCWA_functions/RGB_color_router_broadband/AF_STE/RGB_color_router_IPR1_Ntrial18_Ndim100x100_D3_eta0.01_mfs7_try" + str(i + 1) + "_AF_STE_results.npz") as data:
         cost_all_AF_STE[18*i:18*(i+1)] = np.min(data['cost_hist'], axis=0)
 
 idx_best = np.argmin(cost_all_AF_STE)
 print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_AF_STE[idx_best], flush=True)
 
-np.savez(directory + '/RCWA_functions/RGB_color_router/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_mfs7_simulations',
+np.savez(directory + '/RCWA_functions/RGB_color_router_broadband/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_mfs7_simulations',
     cost_all_GEGD=cost_all_GEGD,
     cost_all_BFGS=cost_all_BFGS,
     cost_all_BFGS_mfs=cost_all_BFGS_mfs,

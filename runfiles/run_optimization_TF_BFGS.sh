@@ -1,13 +1,15 @@
 #!/bin/bash
 
 #SBATCH -o slurm/run_optimization.log-%j
-#SBATCH --partition=cac_gpu
+#SBATCH --partition=ghx4
 #SBATCH --job-name=ens_opt
 ##SBATCH --exclusive
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
-#SBATCH --gres=gpu:h100:1
-#SBATCH --time=16:00:00
+##SBATCH --gres=gpu:h100:1
+#SBATCH --gpus-per-node=1
+#SBATCH --time=48:00:00
+#SBATCH --account=bhkk-dtai-gh
 
 export OMP_NUM_THREADS=20
 export OPENBLAS_NUM_THREADS=20

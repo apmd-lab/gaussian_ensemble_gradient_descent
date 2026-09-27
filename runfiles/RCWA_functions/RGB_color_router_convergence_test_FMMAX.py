@@ -4,7 +4,8 @@ import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
 #sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
 #sys.path.append('/ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent')
-sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
+#sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
+sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent')
 
 Nthreads = 20
 cuda_ind = 0
@@ -18,13 +19,13 @@ import time
 import gegd.parameter_processing.density_transforms as dtf
 
 # Geometry
-Nx = 100
-Ny = 100
+Nx = 125
+Ny = 125
 symmetry = 3 # Currently supported: (None), (D1,2,4)
 periodic = 1
 padding = None
 min_feature_size = 7 # minimum feature size in pixels
-d_pixel = 0.01 # pixel side length (nm)
+d_pixel = 0.008 # pixel side length (nm)
 feasible_design_generation_method = 'brush' # brush / two_phase_projection
 
 if symmetry == 0:
@@ -50,18 +51,18 @@ elif symmetry == 4:
 #----------------------------------------------------------
 import RGB_color_router_FMMAX as objfun
 
-lam = np.array([0.675,0.650,0.625,0.575,0.550,0.525,0.475,0.450,0.425]) # um
+lam = np.array([0.650,0.550,0.450]) # um
 theta_inc = np.array([0])*np.pi/180
 phi_inc = np.array([0])*np.pi/180
 in_plane_wavevector = np.array([0.0, 0.0])
 
 period = np.array([Nx * d_pixel, Ny * d_pixel])
 thickness_background = 1.0
-thickness_pattern = 0.7
+thickness_pattern = 1.12
 thickness_substrate = 1.0
 
 mat_background = np.array(['Air']) # background (incident side)
-mat_pattern = np.array(['Air','Si3N4_Luke']) # Low RI, High RI
+mat_pattern = np.array(['SiO2_bulk','TiO2_Sarkar']) # Low RI, High RI
 mat_substrate = np.array(['Si_Schinke_Shkondin'])
 
 cost_obj = objfun.custom_objective(
@@ -106,7 +107,7 @@ brush_time = t2 - t1
 
 load_data = False
 
-n_harmonic = np.arange(2, 37)**2
+n_harmonic = np.arange(2, 41)**2
 
 cost_all = np.zeros((n_struct, n_harmonic.size))
 sim_time = np.zeros((n_struct, n_harmonic.size))
