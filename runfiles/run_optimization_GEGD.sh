@@ -2,7 +2,7 @@
 
 #SBATCH -o slurm/run_optimization.log-%j
 #SBATCH --partition=ghx4
-#SBATCH --job-name=gegd
+#SBATCH --job-name=gegd3
 ##SBATCH --exclusive
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=10
@@ -24,7 +24,7 @@ source /work/nvme/bhkk/smin2/myenv/bin/activate
 ##: << 'END_COMMENT'
 python run_optimization_polarization_beamsplitter.py \
     --Nthreads 72 \
-    --n_seed 1 \
+    --n_seed 3 \
     --load_data 1 \
     --optimizer 'GEGD' \
     --Nensemble 20 \

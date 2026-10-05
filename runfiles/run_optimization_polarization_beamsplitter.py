@@ -129,7 +129,7 @@ cost_obj_high_fidelity.set_accuracy(high_fidelity_setting)
 cost_obj_low_fidelity.set_accuracy(low_fidelity_setting)
 
 if optimization_algorithm == 'TF_BFGS':
-    Ntrial = int(np.round(Nensemble/(t_fwd_AD/t_high_fidelity)))
+    Ntrial = Nensemble #int(np.round(Nensemble/(t_fwd_AD/t_high_fidelity)))
 
     output_filename = 'polarization_beamsplitter_IPR' + str(int(1/IPR_exponent)) + '_Ntrial' + str(Ntrial) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
@@ -154,7 +154,7 @@ if optimization_algorithm == 'TF_BFGS':
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
 elif optimization_algorithm == 'AF_STE':
-    Ntrial = int(np.round(Nensemble/(t_fwd_AD/t_high_fidelity)))
+    Ntrial = Nensemble #int(np.round(Nensemble/(t_fwd_AD/t_high_fidelity)))
     eta = args.eta
 
     output_filename = 'polarization_beamsplitter_IPR' + str(int(1/IPR_exponent)) + '_Ntrial' + str(Ntrial) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \

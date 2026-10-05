@@ -2,8 +2,8 @@ import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
-#sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
-sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
+sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent')
+sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent/runfiles')
 
 Nthreads = 1
 cuda_ind = 0

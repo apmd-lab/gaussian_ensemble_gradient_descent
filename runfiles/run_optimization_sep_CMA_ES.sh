@@ -2,7 +2,7 @@
 
 #SBATCH -o slurm/run_optimization.log-%j
 #SBATCH --partition=ghx4
-#SBATCH --job-name=sepcmaes
+#SBATCH --job-name=sepcmaes1
 ##SBATCH --exclusive
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
@@ -24,7 +24,7 @@ source /work/nvme/bhkk/smin2/myenv/bin/activate
 ##: << 'END_COMMENT'
 python run_optimization_polarization_beamsplitter.py \
     --Nthreads 20 \
-    --n_seed 0 \
+    --n_seed 1 \
     --load_data 0 \
     --optimizer 'sep_CMA_ES' \
     --Nensemble 20 \

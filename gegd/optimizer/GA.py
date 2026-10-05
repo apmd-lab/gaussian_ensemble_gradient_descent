@@ -198,6 +198,8 @@ class optimizer:
             
             t2 = time.time()
             self.time_hist = np.append(self.time_hist, t2 - t1)
+        
+        return x
 
     def run(
         self,
@@ -248,7 +250,7 @@ class optimizer:
         if comm.rank == 0:
             print('    |  Iteration   |  Avg. Cost   | Cost Stdev.  |  Best Cost   | t_rem(hr) |', flush=True)
     
-        self.GA(
+        x = self.GA(
             lb,
             ub,
             survival_rate=survival_rate,
@@ -258,7 +260,7 @@ class optimizer:
             x=x,
         )
         
-        self.save_data()
+        self.save_data(x=x)
     
     def save_data(self, x=0):
         if comm.rank == 0:
