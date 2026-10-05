@@ -52,7 +52,7 @@ class optimizer:
         elif symmetry == 4:
             self.Ndim = int(np.floor(Nx/2 + 0.5)*(np.floor(Nx/2 + 0.5) + 1)/2)
     
-    def straight_through_jacobian(self, x0):
+    def straight_through_jacobian(self, x0, converged):
         # Get Brush Binarized Densities ------------------------------------------------------------
         x_bin = dtf.binarize(
             x0,
@@ -72,6 +72,10 @@ class optimizer:
         f0 = np.zeros(self.Ntrial)
         jac_STE = np.zeros((self.Ntrial, self.Ndim))
         for n in range(self.Ntrial):
+            if converged[n]:
+                f0[n] = self.cost_hist[-1,n]
+                continue
+
             f0[n], jac_temp = self.cost_obj.get_cost(x_bin[n,:], get_grad=True)
             jac_sym = jac_temp.reshape(self.Nx, self.Ny)
             jac_STE[n,:] = dtf.backprop_filter_and_project(
@@ -101,6 +105,7 @@ class optimizer:
              jac_mean=None,
              jac_var=None,
              adam_iter=None,
+             N_convergence=None,
              ):
     
         # Dummy Variables
@@ -113,14 +118,14 @@ class optimizer:
             jac_var = np.zeros_like(x)
         if adam_iter is None:
             adam_iter = 0
-            
+        converged = np.zeros(self.Ntrial, dtype=bool)
         while True:
             t1 = time.time()
             adam_iter += 1
-            
+
             x_bounded = lb[np.newaxis,:] + (ub[np.newaxis,:] - lb[np.newaxis,:])/(1 + np.exp(-x))
 
-            loss, jac, x_bin = self.straight_through_jacobian(x_bounded)
+            loss, jac, x_bin = self.straight_through_jacobian(x_bounded, converged)
 
             jac[:,ub==lb] = 0
             jac *= np.exp(-x)*(ub[np.newaxis,:] - lb[np.newaxis,:])/(1 + np.exp(-x))**2
@@ -143,7 +148,10 @@ class optimizer:
             t2 = time.time()
 
             if comm.rank == 0:
-                t_rem = (t2 - t1)*(maxiter - self.n_iter + 1)/3600
+                if maxiter is not None:
+                    t_rem = (t2 - t1)*(maxiter - self.n_iter + 1)/3600
+                else:
+                    t_rem = np.nan
                 print('    | %12d | %12.5f |   %5.2f   |' %(self.n_iter, np.min(loss), t_rem), flush=True)
 
             self.save_data(x_bounded=x_bounded,
@@ -152,7 +160,13 @@ class optimizer:
                            jac_var=jac_var,
                            adam_iter=adam_iter)
 
-            if adam_iter >= maxiter:
+            if maxiter is not None and adam_iter >= maxiter:
+                t2 = time.time()
+                self.time_hist = np.append(self.time_hist, t2 - t1)
+                break
+            if np.all(converged):
+                t2 = time.time()
+                self.time_hist = np.append(self.time_hist, t2 - t1)
                 break
 
             # Update Average Gradients
@@ -163,15 +177,25 @@ class optimizer:
             jac_mean_unbiased = jac_mean/(1 - beta_ADAM1**adam_iter)
             jac_var_unbiased = jac_var/(1 - beta_ADAM2**adam_iter)
             
+            # Determine Active Trials
+            if N_convergence is not None and self.n_iter >= N_convergence:
+                converged = np.argmin(self.cost_hist, axis=0) <= (self.n_iter - N_convergence)
+            else:
+                converged = np.zeros(self.Ntrial, dtype=bool)
+
             # Update Variables
-            x -= eta_ADAM*jac_mean_unbiased/(np.sqrt(jac_var_unbiased) + 1e-8)
+            step = eta_ADAM * jac_mean_unbiased / (np.sqrt(jac_var_unbiased) + 1e-8)
+            x[~converged] -= step[~converged]
             # eta *= 0.95
 
             self.n_iter += 1
 
+            t2 = time.time()
+            self.time_hist = np.append(self.time_hist, t2 - t1)
+
         return x_bounded
     
-    def run(self, n_seed, output_filename, maxiter, eta_ADAM=0.1, load_data=False):
+    def run(self, n_seed, output_filename, maxiter, eta_ADAM=0.1, N_convergence=100, load_data=False):
         if comm.rank == 0:
             print('### Brush Optimization (seed = ' + str(n_seed) + ')\n', flush=True)
     
@@ -188,6 +212,7 @@ class optimizer:
             with np.load(data_file1) as data:
                 self.n_iter = data['n_iter']
                 self.cost_hist = data['cost_hist'][:self.n_iter,:]
+                self.time_hist = data['time_hist'][:self.n_iter]
                 adam_iter = data['adam_iter'] - 1
                 
             with np.load(data_file2) as data:
@@ -201,7 +226,7 @@ class optimizer:
             self.x_latent_hist = None
             self.x_hist = None
             self.cost_hist = None
-            
+            self.time_hist = np.zeros(0)
             self.n_iter = 0
         
             # Initial Structure
@@ -218,7 +243,8 @@ class optimizer:
         if comm.rank == 0:
             print('    |  Iteration   |  Best Cost   | t_rem(hr) |', flush=True)
         
-        x_bin = self.ADAM(x0, lb, ub, 0.667, 0.9, eta_ADAM, maxiter, jac_mean=jac_mean, jac_var=jac_var, adam_iter=adam_iter)
+        x_bin = self.ADAM(x0, lb, ub, 0.667, 0.9, eta_ADAM, maxiter,
+            jac_mean=jac_mean, jac_var=jac_var, adam_iter=adam_iter, N_convergence=N_convergence)
         
         if comm.rank == 0:
             print('', flush=True)
@@ -229,6 +255,7 @@ class optimizer:
         if comm.rank == 0:
             np.savez(self.output_filename + "_AF_STE_results",
                      cost_hist=self.cost_hist,
+                     time_hist=self.time_hist,
                      n_iter=self.n_iter,
                      adam_iter=adam_iter)
                      

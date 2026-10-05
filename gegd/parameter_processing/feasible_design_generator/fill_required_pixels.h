@@ -13,6 +13,7 @@ void fill_required_pixels(int* ind_max,
                           int* refconv2,
                           int Nx,
                           int Ny,
-                          int symmetry);
+                          int symmetry,
+                          int brush_size);
 
 #endif

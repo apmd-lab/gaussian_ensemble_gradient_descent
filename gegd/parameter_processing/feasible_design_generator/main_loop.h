@@ -15,6 +15,7 @@ int* main_loop(float* score_solid,
                int brush_size,
                int dim,
                int Nx,
-               int Ny);
+               int Ny,
+               int upsample_ratio);
 
 #endif

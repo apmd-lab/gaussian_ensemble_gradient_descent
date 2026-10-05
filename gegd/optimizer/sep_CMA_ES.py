@@ -26,6 +26,7 @@ class optimizer:
                  cost_obj=None,
                  Nthreads=1,
                  cuda_ind=0,
+                 N_convergence=100,
                  ):
         
         self.Nx = Nx
@@ -46,6 +47,7 @@ class optimizer:
         self.cost_obj = cost_obj
         self.Nthreads = Nthreads
         self.cuda_ind = cuda_ind
+        self.N_convergence = N_convergence
         
         # Get Number of Independent Parameters
         if symmetry == 0:
@@ -174,7 +176,10 @@ class optimizer:
             self.sigma_hist = np.append(self.sigma_hist, sigma.item())
             
             t2 = time.time()
-            t_rem = (t2 - t1)*(self.maxiter - self.n_iter + 1)/3600
+            if self.maxiter is not None:
+                t_rem = (t2 - t1)*(self.maxiter - self.n_iter + 1)/3600
+            else:
+                t_rem = np.nan
             
             if comm.rank == 0:
                 print('    | %4d |  %4d | %7.5f |  %9.2f |  %8.3f |   %5.2f   |' %(
@@ -195,9 +200,18 @@ class optimizer:
                 Cov=torch.diag(Cov).detach().cpu().numpy(),
             )
 
-            if self.n_iter > self.maxiter:
-                self.n_iter += 1
-                break
+            if self.maxiter is not None:
+                if self.n_iter > self.maxiter:
+                    self.n_iter += 1
+                    t2 = time.time()
+                    self.time_hist = np.append(self.time_hist, t2 - t1)
+                    break
+            elif self.n_iter >= self.N_convergence:
+                if np.all(self.best_cost_hist[-self.N_convergence:] == self.best_cost_hist[-1]):
+                    self.n_iter += 1
+                    t2 = time.time()
+                    self.time_hist = np.append(self.time_hist, t2 - t1)
+                    break
 
             # Update Mean
             xmean = arx[:,:mu] @ weights
@@ -223,6 +237,8 @@ class optimizer:
             D = torch.diag(torch.sqrt(torch.diag(Cov)))
             
             self.n_iter += 1
+            t2 = time.time()
+            self.time_hist = np.append(self.time_hist, t2 - t1)
 
     def run(self, n_seed, output_filename, x0=None, load_data=False):
         if comm.rank == 0:
@@ -242,6 +258,7 @@ class optimizer:
                 self.best_cost_hist = data['best_cost_hist'][:self.n_iter]
                 self.cost_ensemble_sigma_hist = data['cost_ensemble_sigma_hist'][:self.n_iter]
                 self.sigma_hist = data['sigma_hist'][:self.n_iter]
+                self.time_hist = data['time_hist'][:self.n_iter]
 
                 sigma = data['sigma']
                 
@@ -266,6 +283,7 @@ class optimizer:
             self.best_cost_hist = np.zeros(0)
             self.cost_ensemble_sigma_hist = np.zeros(0)
             self.sigma_hist = np.zeros(0)
+            self.time_hist = np.zeros(0)
             
             if x0 is None:
                 # Initial Structure
@@ -329,6 +347,7 @@ class optimizer:
                 cost_ensemble_sigma_hist=self.cost_ensemble_sigma_hist,
                 best_cost_hist=self.best_cost_hist,
                 sigma_hist=self.sigma_hist,
+                time_hist=self.time_hist,
                 x_mean_final=x_mean_final,
                 x_latent_final=x_latent_final,
                 best_x_final=best_x_final,

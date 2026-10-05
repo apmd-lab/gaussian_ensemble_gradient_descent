@@ -87,13 +87,20 @@ class optimizer:
             self.x_hist = np.vstack((self.x_hist, x_fp))
 
         if comm.rank == 0:
-            t_rem = 2*(t2 - t1)*(self.Ntrial*self.maxiter - self.n_iter + 1)/3600
+            if self.maxiter is not None:
+                t_rem = 2*(t2 - t1)*(self.Ntrial*self.maxiter - self.n_iter + 1)/3600
+            else:
+                t_rem = np.nan
             print('    | %12d |  %6.2f  | %12.5f |   %5.2f   |' %(self.n_iter, self.beta, f0, t_rem), flush=True)
 
         self.save_data(x0=x0,
                        beta=self.beta)
         
         self.n_iter += 1
+
+        t2 = time.time()
+        self.time_hist = np.append(self.time_hist, t2 - self.global_time)
+        self.global_time = t2
         
         return f0
     
@@ -125,13 +132,18 @@ class optimizer:
     
     def BFGS(self, x0, maxiter_beta):
         bounds = Bounds(lb=-1, ub=1, keep_feasible=True)
+        if not np.isnan(maxiter_beta):
+            options_dict = {'maxfun': maxiter_beta}
+        else:
+            options_dict = {'ftol': 1e-4}
+            
         results = minimize(
             self.grayscale_cost,
             x0,
             method='L-BFGS-B',
             jac=self.grayscale_jacobian,
             bounds=bounds,
-            options={'maxfun': maxiter_beta},
+            options=options_dict,
         )
 
         return results.x
@@ -156,12 +168,14 @@ class optimizer:
                 self.cost_hist = data['cost_hist']
                 self.cost_fin = data['cost_fin']
                 self.x_fin = data['x_fin']
+                self.time_hist = data['time_hist']
                 
             #with np.load(data_file2) as data:
             #    self.x_latent_hist = data['x_latent_hist']
             #    self.x_hist = data['x_hist']
             self.x_latent_hist = None
             self.x_hist = None
+            self.global_time = time.time()
             
         else:
             self.x_latent_hist = None
@@ -169,6 +183,8 @@ class optimizer:
             self.cost_hist = None
             self.cost_fin = np.zeros((2, self.Ntrial))
             self.x_fin = np.zeros((2, self.Ntrial, self.Nx*self.Ny))
+            self.time_hist = np.zeros(0)
+            self.global_time = time.time()
             
             i_start = 0
             n_start = 0
@@ -182,7 +198,10 @@ class optimizer:
         np.random.seed()
         
         self.beta = beta_init
-        self.maxiter_beta = (self.maxiter/self.n_beta)*np.ones(self.n_beta)
+        if self.maxiter is not None:
+            self.maxiter_beta = (self.maxiter/self.n_beta)*np.ones(self.n_beta)
+        else:
+            self.maxiter_beta = np.nan * np.ones(self.n_beta)
 
         for n in range(n_start, self.Ntrial):
             self.ntrial = n
@@ -236,7 +255,8 @@ class optimizer:
                      cost_fin=self.cost_fin,
                      x_fin=self.x_fin,
                      beta=beta,
-                     x_hist_final=x_hist_final)
+                     x_hist_final=x_hist_final,
+                     time_hist=self.time_hist)
                      
             #np.savez(self.output_filename + "_TF_density_hist",
             #         x_hist=self.x_hist,

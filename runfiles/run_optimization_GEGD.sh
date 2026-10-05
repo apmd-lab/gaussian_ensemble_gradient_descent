@@ -2,13 +2,13 @@
 
 #SBATCH -o slurm/run_optimization.log-%j
 #SBATCH --partition=ghx4
-#SBATCH --job-name=ens_opt
+#SBATCH --job-name=gegd
 ##SBATCH --exclusive
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=10
 ##SBATCH --gres=gpu:h100-80:1
 #SBATCH --gpus-per-node=1
-#SBATCH --time=24:00:00
+#SBATCH --time=48:00:00
 #SBATCH --account=bhkk-dtai-gh
 
 export OMP_NUM_THREADS=72
@@ -21,11 +21,11 @@ conda activate base
 source /work/nvme/bhkk/smin2/myenv/bin/activate
 
 ## Polarization Beamsplitter -----------------------------------------------------
-: << 'END_COMMENT'
+##: << 'END_COMMENT'
 python run_optimization_polarization_beamsplitter.py \
-    --Nthreads 32 \
-    --n_seed 9 \
-    --load_data 0 \
+    --Nthreads 72 \
+    --n_seed 1 \
+    --load_data 1 \
     --optimizer 'GEGD' \
     --Nensemble 20 \
     --Nx 45 \
@@ -33,12 +33,13 @@ python run_optimization_polarization_beamsplitter.py \
     --symmetry 1 \
     --upsample_ratio 1 \
     --coeff_exp 20 \
-    --maxiter 400 \
+    --maxiter -1 \
     --sigma_ensemble 1e-2 \
     --eta 5e-5 \
     --min_feature_size 7 \
     --precision 'float64'
-END_COMMENT
+##END_COMMENT
+## load_data = 1 for n_seed = 1, 3, 4, 5, 6, 9
 
 ## RGB Coupler -----------------------------------------------------
 : << 'END_COMMENT'
@@ -59,9 +60,10 @@ python run_optimization_RGB_coupler.py \
     --min_feature_size 7 \
     --precision 'float64'
 END_COMMENT
+## load_data = 1 for n_seed = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
 
 ## RGB Color Router -----------------------------------------------------
-##: << 'END_COMMENT'
+: << 'END_COMMENT'
 python run_optimization_RGB_color_router.py \
     --Nthreads 72 \
     --n_seed 0 \
@@ -78,4 +80,5 @@ python run_optimization_RGB_color_router.py \
     --eta 5e-5 \
     --min_feature_size 7 \
     --precision 'float64'
-##END_COMMENT
+END_COMMENT
+## load_data = 1 for n_seed = 1, 2, 3, 4, 5, 6, 7, 8

@@ -36,6 +36,7 @@ class optimizer:
                  use_ctrlVar=True,
                  Nthreads=1,
                  cuda_ind=0,
+                 N_convergence=100,
                  verbosity=1,
                  ):
         
@@ -66,6 +67,7 @@ class optimizer:
         self.Nthreads = Nthreads
         self.cuda_ind = cuda_ind
         self.device = 'cuda:' + str(cuda_ind) if torch.cuda.is_available() else 'cpu'
+        self.N_convergence = N_convergence
         self.verbosity = verbosity
         
         # Get Number of Independent Parameters
@@ -622,7 +624,6 @@ class optimizer:
             x_bounded = x.copy()
             x_bounded[mask_bound] = lb[mask_bound] + (ub[mask_bound] - lb[mask_bound])/(1 + np.exp(-x[mask_bound]))
 
-            t1 = time.time()
             mu = x_bounded[:self.Ndim]
             sigma = x_bounded[self.Ndim:]
             mu_fp, sigma_fp, loss_mean, loss_std, loss_ctrl_mean, loss_ctrl_std, jac, ctrlVarCoeff_mu, ctrlVarCoeff_sigma, corr_f, corr_mu, corr_sigma, f_best, x_best = self.ensemble_jacobian(
@@ -716,7 +717,10 @@ class optimizer:
                 self.corr_sigma_hist = np.vstack((self.corr_sigma_hist, corr_sigma))
         
             t2 = time.time()
-            t_rem = (t2 - t1)*(self.maxiter - self.n_iter + 1)/3600
+            if self.maxiter is not None:
+                t_rem = (t2 - t1)*(self.maxiter - self.n_iter + 1)/3600
+            else:
+                t_rem = np.nan
 
             degree_of_binarization = np.max((np.mean(mu_fp[mu_fp >= 0]), np.mean(-mu_fp[mu_fp <= 0])))
             
@@ -754,19 +758,23 @@ class optimizer:
                         self.best_cost_hist[-1]),
                         end='', flush=True)
             
-            t1 = time.time()
             self.save_data(x_bounded=x_bounded,
                            jac_mean=jac_mean,
                            jac_var=jac_var,
                            adam_iter=adam_iter,
                            x_bounded_norm_ref=x_bounded_norm_ref)
-            t2 = time.time()
-            if comm.rank == 0 and self.verbosity >= 2:
-                print('--> Data Saving: ', t2-t1, flush=True)
 
-            if adam_iter >= self.maxiter:
-                #self.n_iter += 1
-                break
+            if self.maxiter is not None:
+                if adam_iter >= self.maxiter:
+                    #self.n_iter += 1
+                    t2 = time.time()
+                    self.time_hist = np.append(self.time_hist, t2 - t1)
+                    break
+            elif self.n_iter >= self.N_convergence:
+                if np.all(self.best_cost_hist[-self.N_convergence:] == self.best_cost_hist[-1]):
+                    t2 = time.time()
+                    self.time_hist = np.append(self.time_hist, t2 - t1)
+                    break
                 
             # Update Average Gradients
             jac_mean = beta_ADAM1*jac_mean + (1 - beta_ADAM1)*jac
@@ -797,6 +805,9 @@ class optimizer:
             self.eta_sched_hist = np.append(self.eta_sched_hist, eta_sched[0])
             
             self.n_iter += 1
+
+            t2 = time.time()
+            self.time_hist = np.append(self.time_hist, t2 - t1)
 
     def run(self, n_seed, output_filename, x0=None, eta_mu=0.01, eta_sigma=1.0, load_data=False):
         if comm.rank == 0 and self.verbosity >= 1:
@@ -833,6 +844,8 @@ class optimizer:
                 self.corr_f_hist = data['corr_f_hist'][:self.n_iter]
                 self.x_bounded_norm_hist = data['x_bounded_norm_hist'][:self.n_iter]
                 self.eta_sched_hist = data['eta_sched_hist'][:self.n_iter]
+                #self.time_hist = data['time_hist'][:self.n_iter]
+                self.time_hist = np.zeros(self.n_iter)
                 if self.Nsigma == 1:
                     self.sigma_hist = data['sigma_hist'][:self.n_iter]
                 adam_iter = data['adam_iter'] - 1
@@ -884,6 +897,7 @@ class optimizer:
             self.corr_f_hist = np.zeros(0)
             self.x_bounded_norm_hist = np.zeros(0)
             self.eta_sched_hist = np.zeros(0)
+            self.time_hist = np.zeros(0)
             
             if x0 is None:
                 # Initial Structure
@@ -950,6 +964,7 @@ class optimizer:
                          corr_f_hist=self.corr_f_hist,
                          x_bounded_norm_hist=self.x_bounded_norm_hist,
                          eta_sched_hist=self.eta_sched_hist,
+                         time_hist=self.time_hist,
                          sigma_hist=self.sigma_hist,
                          n_iter=self.n_iter,
                          mu_fp_hist_final=mu_fp_hist_final,
@@ -987,6 +1002,7 @@ class optimizer:
                          corr_f_hist=self.corr_f_hist,
                          x_bounded_norm_hist=self.x_bounded_norm_hist,
                          eta_sched_hist=self.eta_sched_hist,
+                         time_hist=self.time_hist,
                          n_iter=self.n_iter,
                          adam_iter=adam_iter,
                          x_bounded_norm_ref=x_bounded_norm_ref,

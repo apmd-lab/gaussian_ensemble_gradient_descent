@@ -29,10 +29,37 @@ int* main_loop(float* score_solid,
                int brush_size,
                int dim,
                int Nx,
-               int Ny) {
+               int Ny,
+               int upsample_ratio) {
 
     int* pix_result = (int*)malloc(Nx * Ny * sizeof(int));
     if (!pix_result) return NULL;
+
+    // Initial pass: resolve any required pixels already created by pre-fill (only when upsample_ratio > 1)
+    if (upsample_ratio > 1) {
+        fill_required_pixels(NULL,
+                             touch_solid,
+                             touch_void,
+                             pix_solid,
+                             score_solid,
+                             refconv0,
+                             refconv1,
+                             refconv2,
+                             Nx,
+                             Ny,
+                             symmetry,
+                             brush_size);
+
+        int initial_empty = 0;
+        for (int i = 0; i < Nx * Ny; ++i) {
+            if (pix_solid[i] == 0) initial_empty++;
+        }
+        if (initial_empty == 0) {
+            for (int i = 0; i < Nx * Ny; ++i)
+                pix_result[i] = pix_solid[i];
+            return pix_result;
+        }
+    }
 
     int n_iter = 0;
     int debug_iter = INT_MAX;
@@ -125,7 +152,6 @@ int* main_loop(float* score_solid,
         if (n_iter == debug_iter) {
             printf("solid_flag = %d\n", solid_flag);
             printf("ind_max = [%d,%d]\n", ind_max[0], ind_max[1]);
-            //exit(EXIT_FAILURE);
         }
 
         int n_empty_before = 0;
@@ -143,7 +169,7 @@ int* main_loop(float* score_solid,
                    Nx,
                    Ny,
                    symmetry);
-        
+
         if (n_iter == debug_iter) {
             save_int_array_to_npy("touch_solid_make_touch.npy", touch_solid, Nx, Ny);
             save_int_array_to_npy("touch_void_make_touch.npy", touch_void, Nx, Ny);
@@ -166,7 +192,8 @@ int* main_loop(float* score_solid,
                                  refconv2,
                                  Nx,
                                  Ny,
-                                 symmetry);
+                                 symmetry,
+                                 brush_size);
         }
         
         if (n_iter == debug_iter) {
@@ -198,9 +225,6 @@ int* main_loop(float* score_solid,
         }
         n_empty_touch_solid_prev = n_empty_touch_solid;
         n_empty_touch_void_prev = n_empty_touch_void;
-        //if (n_iter % 10 == 0) {
-        //    printf("Iter %d | Unassigned Solid Pixels: %d | Unassigned Solid Touches: %d | Unassigned Void Touches: %d\n", n_iter, n_empty_pix_solid, n_empty_touch_solid, n_empty_touch_void);
-        //}
 
         if (n_empty_pix_solid == 0)
             break;

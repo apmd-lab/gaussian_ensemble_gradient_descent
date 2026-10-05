@@ -3,7 +3,8 @@ directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
 #sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
-sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
+#sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
+sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent')
 
 Nthreads = 1
 cuda_ind = 0
@@ -81,7 +82,7 @@ cost_obj = objfun.custom_objective(
 # Convergence Test
 print('### Convergence Test')
 
-n_struct = 7
+n_struct = 100
 np.random.seed(100)
 x = 2*np.random.rand(n_struct, Ndim) - 1
 t1 = time.time()
@@ -102,6 +103,7 @@ x_brush_all = dtf.binarize(
 t2 = time.time()
 brush_time = t2 - t1
 
+'''
 with np.load('polarization_beamsplitter_IPR1_Nensemble20_Ndim45x90_D1_mfs7_try4_AF_GA_results.npz') as data:
     x_brush_all[0,:] = data['best_x_binary_final']
 with np.load('polarization_beamsplitter_IPR1_Nensemble20_Ndim45x90_D1_mfs7_try4_AF_GA_density_hist.npz') as data:
@@ -110,6 +112,7 @@ with np.load('polarization_beamsplitter_IPR1_Nensemble20_Ndim45x90_D1_mfs7_try4_
     x_brush_all[3,:] = data['best_x_final']
 with np.load('polarization_beamsplitter_IPR1_Nensemble20_Ndim45x90_D1_mfs7_try4_sep_CMA_ES_density_hist.npz') as data:
     x_brush_all[4:7,:] = data['best_x_hist'][[369,374,375],:]
+'''
 
 n_harmonic = np.arange(2, 51)**2
 

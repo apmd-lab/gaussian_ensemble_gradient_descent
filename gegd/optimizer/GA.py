@@ -25,6 +25,7 @@ class optimizer:
                  cost_obj=None,
                  Nthreads=1,
                  cuda_ind=0,
+                 N_convergence=100,
                  ):
         
         self.Nx = Nx
@@ -44,6 +45,7 @@ class optimizer:
         self.cost_obj = cost_obj
         self.Nthreads = Nthreads
         self.cuda_ind = cuda_ind
+        self.N_convergence = N_convergence
 
         # Get Number of Independent Parameters
         if symmetry == 0:
@@ -144,7 +146,10 @@ class optimizer:
                         self.best_x_binary_hist = np.vstack((self.best_x_binary_hist, self.best_x_binary_hist[-1,:]))
             
             t2 = time.time()
-            t_rem = (t2 - t1)*(self.maxiter - self.n_iter + 1)/3600
+            if self.maxiter is not None:
+                t_rem = (t2 - t1)*(self.maxiter - self.n_iter + 1)/3600
+            else:
+                t_rem = np.nan
 
             if comm.rank == 0:
                 print('    | %12d | %12.5f | %12.5f | %12.5f |   %5.2f   |' %(self.n_iter, np.mean(cost), np.std(cost), self.best_cost_hist[-1], t_rem), flush=True)
@@ -154,8 +159,16 @@ class optimizer:
             self.n_iter += 1
                 
             #Termination Condition
-            if self.n_iter > self.maxiter:
-                break
+            if self.maxiter is not None:
+                if self.n_iter > self.maxiter:
+                    t2 = time.time()
+                    self.time_hist = np.append(self.time_hist, t2 - t1)
+                    break
+            elif self.n_iter >= self.N_convergence:
+                if np.all(self.best_cost_hist[-self.N_convergence:] == self.best_cost_hist[-1]):
+                    t2 = time.time()
+                    self.time_hist = np.append(self.time_hist, t2 - t1)
+                    break
                 
             for i in range(int(self.Nbatch * survival_rate * elitism_rate), self.Nbatch): # elites are passed to the next generation as is
                 if i >= int(self.Nbatch * survival_rate): # chromosomes that failed to survive are replaced by offsprings of chromosomes that survived
@@ -182,6 +195,9 @@ class optimizer:
                 for j in range(self.Ndim):
                     if np.random.random() < mutation_rate:
                         x[i,j] = np.random.uniform(lb, ub)
+            
+            t2 = time.time()
+            self.time_hist = np.append(self.time_hist, t2 - t1)
 
     def run(
         self,
@@ -210,6 +226,8 @@ class optimizer:
             with np.load(data_file1) as data:
                 self.n_iter = data['n_iter']
                 self.best_cost_hist = data['best_cost_hist'][:self.n_iter]
+                #self.time_hist = data['time_hist'][:self.n_iter]
+                self.time_hist = np.zeros(self.n_iter)
                 
             with np.load(data_file2) as data:
                 self.best_chromosome_hist = data['best_chromosome_hist'][:self.n_iter,:]
@@ -219,6 +237,7 @@ class optimizer:
 
         else:
             self.best_cost_hist = np.zeros(0)
+            self.time_hist = np.zeros(0)
             self.best_chromosome_hist = None
             self.best_x_binary_hist = None
             
@@ -256,6 +275,7 @@ class optimizer:
                 n_iter=self.n_iter,
                 best_chromosome_final=best_chromosome_final,
                 best_x_binary_final=best_x_binary_final,
+                time_hist=self.time_hist,
             )
                      
             np.savez(

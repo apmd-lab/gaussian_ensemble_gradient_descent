@@ -81,7 +81,9 @@ int* make_feasible(
     int* touch_void = (int*)calloc(Nx_up * Ny_up, sizeof(int));
     int* pix_solid = (int*)calloc(Nx_up * Ny_up, sizeof(int));
     float* score_solid = (float*)calloc(Nx_up * Ny_up, sizeof(float));
-    float* score_solid_pre_fill = (float*)calloc(Nx_up * Ny_up, sizeof(float));
+    float* score_solid_pre_fill = NULL;
+    int* brush_plus4 = NULL;
+    int brush_plus4_sum = 0;
 
     int r_c = (brush_size - 1) / 2;
     int r_c_plus4 = (brush_size + 3) / 2;
@@ -100,16 +102,18 @@ int* make_feasible(
         }
     }
 
-    // Define brush with size + 4
-    int* brush_plus4 = (int*)calloc((brush_size + 4) * (brush_size + 4), sizeof(int));
-    int brush_plus4_sum = 0;
-    for (int i = 0; i < brush_size + 4; ++i) {
-        for (int j = 0; j < brush_size + 4; ++j) {
-            int dx = i - r_c_plus4;
-            int dy = j - r_c_plus4;
-            if (sqrt(dx*dx + dy*dy) <= r_c_plus4) {
-                brush_plus4[IDX(i, j, brush_size + 4)] = 1;
-                ++brush_plus4_sum;
+    // Define brush with size + 4 (only needed for pre-fill when upsample_ratio > 1)
+    if (upsample_ratio > 1) {
+        score_solid_pre_fill = (float*)calloc(Nx_up * Ny_up, sizeof(float));
+        brush_plus4 = (int*)calloc((brush_size + 4) * (brush_size + 4), sizeof(int));
+        for (int i = 0; i < brush_size + 4; ++i) {
+            for (int j = 0; j < brush_size + 4; ++j) {
+                int dx = i - r_c_plus4;
+                int dy = j - r_c_plus4;
+                if (sqrt(dx*dx + dy*dy) <= r_c_plus4) {
+                    brush_plus4[IDX(i, j, brush_size + 4)] = 1;
+                    ++brush_plus4_sum;
+                }
             }
         }
     }
@@ -162,7 +166,9 @@ int* make_feasible(
     
     if (debug) {
         save_int_array_to_npy("brush.npy", brush, brush_size, brush_size);
-        save_int_array_to_npy("brush_plus4.npy", brush_plus4, brush_size + 4, brush_size + 4);
+        if (upsample_ratio > 1) {
+            save_int_array_to_npy("brush_plus4.npy", brush_plus4, brush_size + 4, brush_size + 4);
+        }
         save_int_array_to_npy("brush_conv_shape.npy", brush_conv_shape, brush_size_conv, brush_size_conv);
         save_int_array_to_npy("brush_conv_shape2.npy", brush_conv_shape2, brush_size_conv2, brush_size_conv2);
         //exit(EXIT_FAILURE);
@@ -179,121 +185,127 @@ int* make_feasible(
         periodic
     );
 
-    convolve(
-        weight_upsampled,
-        score_solid_pre_fill,
-        brush_plus4,
-        Nx_up,
-        Ny_up,
-        brush_size + 4,
-        periodic
-    );
+    if (upsample_ratio > 1) {
+        convolve(
+            weight_upsampled,
+            score_solid_pre_fill,
+            brush_plus4,
+            Nx_up,
+            Ny_up,
+            brush_size + 4,
+            periodic
+        );
+    }
              
     free(weight_upsampled);
     
     if (debug) {
         save_float_array_to_npy("score_solid.npy", score_solid, Nx_up, Ny_up);
-        save_float_array_to_npy("score_solid_pre_fill.npy", score_solid_pre_fill, Nx_up, Ny_up);
+        if (upsample_ratio > 1) {
+            save_float_array_to_npy("score_solid_pre_fill.npy", score_solid_pre_fill, Nx_up, Ny_up);
+        }
         //exit(EXIT_FAILURE);
     }
     
-    // Pre-fill touches
-    int* touch_solid_pos = (int*)calloc(Nx_up * Ny_up, sizeof(int));
-    int* touch_solid_neg = (int*)calloc(Nx_up * Ny_up, sizeof(int));
-    
-    for (int i = 0; i < Nx_up * Ny_up; ++i) {
-        if (score_solid_pre_fill[i] >= brush_plus4_sum) {
-            touch_solid[i] = 1;
-            touch_solid_pos[i] = 1;
-        } else if (score_solid_pre_fill[i] <= -brush_plus4_sum) {
-            touch_void[i] = 1;
-            touch_solid_neg[i] = 1;
+    // Pre-fill touches (only when upsample_ratio > 1)
+    if (upsample_ratio > 1) {
+        int* touch_solid_pos = (int*)calloc(Nx_up * Ny_up, sizeof(int));
+        int* touch_solid_neg = (int*)calloc(Nx_up * Ny_up, sizeof(int));
+        
+        for (int i = 0; i < Nx_up * Ny_up; ++i) {
+            if (score_solid_pre_fill[i] >= brush_plus4_sum) {
+                touch_solid[i] = 1;
+                touch_solid_pos[i] = 1;
+            } else if (score_solid_pre_fill[i] <= -brush_plus4_sum) {
+                touch_void[i] = 1;
+                touch_solid_neg[i] = 1;
+            }
         }
-    }
-    
-    temp = (int*)calloc(Nx_up * Ny_up, sizeof(int));
-    binary_convolve(
-        touch_solid_pos,
-        temp,
-        brush,
-        Nx_up,
-        Ny_up,
-        brush_size,
-        periodic
-    );
-    for (int i = 0; i < Nx_up * Ny_up; ++i) {
-        if (temp[i]) {
-            pix_solid[i] = 1;
+        
+        temp = (int*)calloc(Nx_up * Ny_up, sizeof(int));
+        binary_convolve(
+            touch_solid_pos,
+            temp,
+            brush,
+            Nx_up,
+            Ny_up,
+            brush_size,
+            periodic
+        );
+        for (int i = 0; i < Nx_up * Ny_up; ++i) {
+            if (temp[i]) {
+                pix_solid[i] = 1;
+            }
         }
-    }
-    
-    free(temp);
-    
-    temp = (int*)calloc(Nx_up * Ny_up, sizeof(int));
-    binary_convolve(
-        touch_solid_neg,
-        temp,
-        brush,
-        Nx_up,
-        Ny_up,
-        brush_size,
-        periodic
-    );
-    for (int i = 0; i < Nx_up * Ny_up; ++i) {
-        if (temp[i]) {
-            pix_solid[i] = -1;
+        
+        free(temp);
+        
+        temp = (int*)calloc(Nx_up * Ny_up, sizeof(int));
+        binary_convolve(
+            touch_solid_neg,
+            temp,
+            brush,
+            Nx_up,
+            Ny_up,
+            brush_size,
+            periodic
+        );
+        for (int i = 0; i < Nx_up * Ny_up; ++i) {
+            if (temp[i]) {
+                pix_solid[i] = -1;
+            }
         }
-    }
-    
-    free(temp);
+        
+        free(temp);
 
-    temp = (int*)calloc(Nx_up * Ny_up, sizeof(int));
-    binary_convolve(
-        touch_solid_pos,
-        temp,
-        brush_conv_shape,
-        Nx_up,
-        Ny_up,
-        brush_size_conv,
-        periodic
-    );
-    for (int i = 0; i < Nx_up * Ny_up; ++i) {
-        if (temp[i]) {
-            touch_void[i] = -1;
+        temp = (int*)calloc(Nx_up * Ny_up, sizeof(int));
+        binary_convolve(
+            touch_solid_pos,
+            temp,
+            brush_conv_shape,
+            Nx_up,
+            Ny_up,
+            brush_size_conv,
+            periodic
+        );
+        for (int i = 0; i < Nx_up * Ny_up; ++i) {
+            if (temp[i]) {
+                touch_void[i] = -1;
+            }
         }
-    }
-    
-    free(temp);
+        
+        free(temp);
 
-    temp = (int*)calloc(Nx_up * Ny_up, sizeof(int));
-    binary_convolve(
-        touch_solid_neg,
-        temp,
-        brush_conv_shape,
-        Nx_up,
-        Ny_up,
-        brush_size_conv,
-        periodic
-    );
-    for (int i = 0; i < Nx_up * Ny_up; ++i) {
-        if (temp[i]) {
-            touch_solid[i] = -1;
+        temp = (int*)calloc(Nx_up * Ny_up, sizeof(int));
+        binary_convolve(
+            touch_solid_neg,
+            temp,
+            brush_conv_shape,
+            Nx_up,
+            Ny_up,
+            brush_size_conv,
+            periodic
+        );
+        for (int i = 0; i < Nx_up * Ny_up; ++i) {
+            if (temp[i]) {
+                touch_solid[i] = -1;
+            }
         }
+        
+        free(temp);
+        
+        if (debug) {
+            save_int_array_to_npy("touch_solid_pos.npy", touch_solid_pos, Nx_up, Ny_up);
+            save_int_array_to_npy("touch_solid_neg.npy", touch_solid_neg, Nx_up, Ny_up);
+            save_int_array_to_npy("touch_solid.npy", touch_solid, Nx_up, Ny_up);
+            save_int_array_to_npy("touch_void.npy", touch_void, Nx_up, Ny_up);
+            save_int_array_to_npy("pix_solid.npy", pix_solid, Nx_up, Ny_up);
+            exit(EXIT_FAILURE);
+        }
+        
+        free(touch_solid_pos);
+        free(touch_solid_neg);
     }
-    
-    free(temp);
-    
-    if (debug) {
-        save_int_array_to_npy("touch_solid_pos.npy", touch_solid_pos, Nx_up, Ny_up);
-        save_int_array_to_npy("touch_solid_neg.npy", touch_solid_neg, Nx_up, Ny_up);
-        save_int_array_to_npy("touch_solid.npy", touch_solid, Nx_up, Ny_up);
-        save_int_array_to_npy("touch_void.npy", touch_void, Nx_up, Ny_up);
-        save_int_array_to_npy("pix_solid.npy", pix_solid, Nx_up, Ny_up);
-        exit(EXIT_FAILURE);
-    }
-    
-    free(touch_solid_pos);
-    free(touch_solid_neg);
         
     // Compute reference convolutions on delta
     int* refconv0 = (int*)calloc(Nx_up * Ny_up, sizeof(int));
@@ -349,7 +361,8 @@ int* make_feasible(
     free(temp);
     
     free(brush);
-    free(brush_plus4);
+    if (brush_plus4) free(brush_plus4);
+    if (score_solid_pre_fill) free(score_solid_pre_fill);
     free(brush_conv_shape);
     free(brush_conv_shape2);
     
@@ -373,7 +386,8 @@ int* make_feasible(
         brush_size,
         dim,
         Nx_up,
-        Ny_up
+        Ny_up,
+        upsample_ratio
     );
     
     free(touch_solid);
