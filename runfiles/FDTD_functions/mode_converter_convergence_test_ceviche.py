@@ -26,12 +26,13 @@ if not os.path.exists(directory[:-15] + "/results"):
     os.mkdir(directory[:-15] + "/results")
 
 # Geometry
-Nx = 100
-Ny = 100
+Nx = 70
+Ny = 70
 symmetry = 0 # Currently supported: (None), (D1,2,4)
 periodic = 0
-brush_size = 7 # minimum feature size in pixels
+min_feature_size = 7 # minimum feature size in pixels
 upsample_ratio = 1
+feasible_design_generation_method = 'brush'
 
 if symmetry == 0:
     Ndim = Nx*Ny
@@ -41,6 +42,9 @@ elif symmetry == 1:
 
 elif symmetry == 2:
     Ndim = int(np.floor(Nx/2 + 0.5)*np.floor(Ny/2 + 0.5))
+
+elif symmetry == 3:
+    Ndim = int(np.floor(Nx + 0.5)*(np.floor(Nx + 0.5) + 1)/2)
 
 elif symmetry == 4:
     Ndim = int(np.floor(Nx/2 + 0.5)*(np.floor(Nx/2 + 0.5) + 1)/2)
@@ -93,21 +97,34 @@ cost_obj = objfun.custom_objective(
 # Convergence Test
 print('### Convergence Test')
 
-n_struct = 10
+n_struct = 100
 np.random.seed(100)
 x = 2*np.random.rand(n_struct, Ndim) - 1
 t1 = time.time()
-x_all, x_brush_all = dtf.binarize(x, symmetry, periodic, Nx, Ny, brush_size, 'circle', 8, brush_size*np.sqrt(2)/4, upsample_ratio=upsample_ratio, padding=padding, output_details=True, Nthreads=Nthreads)
+x_brush_all = dtf.binarize(
+    x,
+    symmetry,
+    periodic,
+    Nx,
+    Ny,
+    min_feature_size,
+    'circle',
+    8.0,
+    min_feature_size/2,
+    method=feasible_design_generation_method,
+    Nthreads=Nthreads,
+    print_runtime_details=True,
+)
 t2 = time.time()
 brush_time = t2 - t1
 
 if comm.rank == 0:
-    np.savez(directory[:-15] + "/results/mode_converter_convergence_test_brush" + str(brush_size) + "_Nx" + str(Nx) + "_Ny" + str(Ny),
+    np.savez("/mode_converter_convergence_test_brush" + str(brush_size) + "_Nx" + str(Nx) + "_Ny" + str(Ny),
         brush_time=brush_time,
         x_brush_all=x_brush_all,
     )
 
-upsampling_ratio_fdtd = np.array([1/2,1/5,1/4,1/2,1])
+upsampling_ratio_fdtd = np.linspace(0.2, 5.0, 25)
 
 #with np.load(directory[:-15] + "/results/integrated_bandpass_filter_convergence_test_brush" + str(brush_size) + ".npz") as data:
 #    cost_all = data['cost_all']
@@ -127,7 +144,6 @@ for nb in range(n_struct):
             print('\t\tUpsampling Ratio: ' + str(upsampling_ratio_fdtd[nu]), end='', flush=True)
         cost_obj.set_accuracy(upsampling_ratio_fdtd[nu])
         x = x_brush_all[nb,:].reshape(Nx*upsample_ratio, Ny*upsample_ratio)
-        #x = np.random.rand(Nx*upsample_ratio, Ny*upsample_ratio)
 
         t1 = time.time()
         cost = cost_obj.get_cost(x, False)
@@ -140,23 +156,6 @@ for nb in range(n_struct):
         
         t1 = time.time()
         cost, jac = cost_obj.get_cost(x, True)
-#        np.savez(directory + '/debug_adjoint_jac0', jac=jac)
-#        assert False
-#        jac_FD = np.zeros((Nx, Ny))
-#        for nx in range(Nx):
-#            for ny in range(Ny):
-#                print('Nx: ' + str(nx) + ' | Ny: ' + str(ny), flush=True)
-#                x1 = x.copy().astype(np.float64)
-#                x1[nx,ny] -= 1e-6
-#                f1 = cost_obj.get_cost(x1, False)
-#                
-#                x2 = x.copy().astype(np.float64)
-#                x2[nx,ny] += 1e-6
-#                f2 = cost_obj.get_cost(x2, False)
-#                
-#                jac_FD[nx,ny] = (f2 - f1)/2e-6
-#        np.savez(directory + '/debug_adjoint_jac', x=x, jac=jac, jac_FD=jac_FD)
-#        assert False
         t2 = time.time()
         sim_time_fwd_adj[nb,nu] = t2 - t1
 
@@ -164,7 +163,7 @@ for nb in range(n_struct):
             print(' | Fwd+Adj Time: ' + str(sim_time_fwd_adj[nb,nu]) + ' s', flush=True)
         
         if comm.rank == 0:
-            np.savez(directory[:-15] + "/results/mode_converter_convergence_test_brush" + str(brush_size) + "_Nx" + str(Nx) + "_Ny" + str(Ny),
+            np.savez("/mode_converter_convergence_test_brush" + str(brush_size) + "_Nx" + str(Nx) + "_Ny" + str(Ny),
                 cost_all=cost_all,
                 brush_time=brush_time,
                 sim_time=sim_time,

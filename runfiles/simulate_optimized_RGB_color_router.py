@@ -60,8 +60,14 @@ mat_substrate = np.array(['Si_Schinke_Shkondin'])
 # high-fidelity: accuracy required for actual application
 # low-fidelity: faster and less accurate, but accurate enough to ensure high correlation with the high-fidelity simulations
 #--------------------------------------------------------------------------------------------------------------------------
-low_fidelity_setting = 17**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-high_fidelity_setting = 37**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+low_fidelity_setting = 18**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+high_fidelity_setting = 40**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+t_low_fidelity = 1.13 # low-fidelity simulation time in seconds
+t_high_fidelity = 10.30 # high-fidelity simulation time in seconds
+t_fwd_AD = 11.89
+N_convergence = 100
+
+data_dir = "/RCWA_functions/RGB_color_router/run_until_convergence"
 
 # Process wavelengths in chunks to limit GPU memory usage
 lam_chunk_size = 9
@@ -130,15 +136,25 @@ print('### Running Simulations', flush=True)
 
 print('\n\t*GEGD', end='', flush=True)
 cost_all_GEGD = np.zeros(10)
+t_sim_GEGD = np.zeros(10)
+convergence_rate_GEGD = np.zeros(10)
 for i in range(10):
-    with np.load(directory + "/RCWA_functions/RGB_color_router_broadband/GEGD/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(i + 1) + "_GEGD_results.npz") as data:
-        cost_all_GEGD[i] = data['best_cost_hist'][-1]
+    with np.load(directory + data_dir + "/GEGD/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(i + 1) + "_GEGD_results.npz") as data:
+        best_cost_hist = data['best_cost_hist']
+        N_high_fidelity_hist = data['N_high_fidelity_hist']
+        N_low_fidelity_hist = data['N_low_fidelity_hist']
+        for j in range(best_cost_hist.size):
+            if j >= N_convergence and np.all(best_cost_hist[-N_convergence:] <= best_cost_hist[-1] + 1e-3):
+                t_sim_GEGD[i] = t_high_fidelity * np.sum(N_high_fidelity_hist[:j-N_convergence]) + t_low_fidelity * np.sum(N_low_fidelity_hist[:j-N_convergence])
+                cost_all_GEGD[i] = best_cost_hist[j]
+                convergence_rate_GEGD[i] = np.abs(best_cost_hist[0] - cost_all_GEGD[i]) / t_sim_GEGD[i]
+                break
 
 idx_best = np.argmin(cost_all_GEGD)
 print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GEGD[idx_best], flush=True)
 
-with np.load(directory + "/RCWA_functions/RGB_color_router_broadband/GEGD/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(idx_best + 1) + "_GEGD_results.npz") as data:
-    x = data['best_x_final'].reshape(Nx, Ny)
+with np.load(directory + data_dir + "/GEGD/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(idx_best + 1) + "_GEGD_density_hist.npz") as data:
+    x = data['best_x_hist'][int(convergence_iter_GEGD[idx_best]),:].reshape(Nx, Ny)
 
 print('\n\t  Simulating native resolution...', flush=True)
 flux, R_flux, G_flux, B_flux, incident_flux = simulate_chunked(x, 1)
@@ -147,12 +163,16 @@ print('\n\t  Simulating upsampled resolution...', flush=True)
 flux_up, R_flux_up, G_flux_up, B_flux_up, incident_flux_up = simulate_chunked(x_up, upsampling_ratio)
 
 print('\n\t*TF-BFGS', end='', flush=True)
-cost_all_BFGS = np.zeros(180)
-cost_all_BFGS_mfs = np.zeros(180)
+cost_all_BFGS = np.zeros(10)
+cost_all_BFGS_mfs = np.zeros(10)
+t_sim_BFGS = np.zeros(10)
 for i in range(10):
-    with np.load(directory + "/RCWA_functions/RGB_color_router_broadband/TF_BFGS/RGB_color_router_IPR1_Ntrial18_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_TF_results.npz") as data:
-        cost_all_BFGS[18*i:18*(i+1)] = data['cost_fin'][0,:]
-        cost_all_BFGS_mfs[18*i:18*(i+1)] = data['cost_fin'][1,:]
+    with np.load(directory + data_dir + "/TF_BFGS/RGB_color_router_IPR1_Ntrial18_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_TF_results.npz") as data:
+        cost_fin = data['cost_fin']
+        cost_hist = data['cost_hist']
+        cost_all_BFGS[i] = np.min(cost_fin[0,:])
+        cost_all_BFGS_mfs[i] = np.min(cost_fin[1,:])
+        t_sim_BFGS[i] = t_fwd_AD * (cost_hist.size)
 
 idx_best = np.argmin(cost_all_BFGS)
 idx_best_mfs = np.argmin(cost_all_BFGS_mfs)
@@ -160,38 +180,72 @@ print(' --> Best Cost (idx=',idx_best+1,', idx_best_mfs=',idx_best_mfs,'): ',cos
 
 print('\n\t*sep-CMA-ES', end='', flush=True)
 cost_all_sep_CMA_ES = np.zeros(10)
+t_sim_sep_CMA_ES = np.zeros(10)
+convergence_rate_sep_CMA_ES = np.zeros(10)
 for i in range(10):
-    with np.load(directory + "/RCWA_functions/RGB_color_router_broadband/sep_CMA_ES/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_sep_CMA_ES_results.npz") as data:
-        cost_all_sep_CMA_ES[i] = data['best_cost_hist'][-1]
+    with np.load(directory + data_dir + "/sep_CMA_ES/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_sep_CMA_ES_results.npz") as data:
+        best_cost_hist = data['best_cost_hist']
+        for j in range(best_cost_hist.size):
+            if j >= N_convergence and np.all(best_cost_hist[-N_convergence:] <= best_cost_hist[-1] + 1e-3):
+                t_sim_sep_CMA_ES[i] = 20 * t_high_fidelity * (j - N_convergence)
+                cost_all_sep_CMA_ES[i] = best_cost_hist[j]
+                convergence_rate_sep_CMA_ES[i] = np.abs(best_cost_hist[0] - cost_all_sep_CMA_ES[i]) / t_sim_sep_CMA_ES[i]
+                break
 
 idx_best = np.argmin(cost_all_sep_CMA_ES)
 print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_sep_CMA_ES[idx_best], flush=True)
 
 print('\n\t*GA', end='', flush=True)
 cost_all_GA = np.zeros(10)
+t_sim_GA = np.zeros(10)
+convergence_rate_GA = np.zeros(10)
 for i in range(10):
-    with np.load(directory + "/RCWA_functions/RGB_color_router_broadband/GA/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_AF_GA_results.npz") as data:
-        cost_all_GA[i] = data['best_cost_hist'][-1]
+    with np.load(directory + data_dir + "/GA/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_AF_GA_results.npz") as data:
+        best_cost_hist = data['best_cost_hist']
+        for j in range(best_cost_hist.size):
+            if j >= N_convergence and np.all(best_cost_hist[-N_convergence:] <= best_cost_hist[-1] + 1e-3):
+                t_sim_GA[i] = 20 * t_high_fidelity * (j - N_convergence)
+                cost_all_GA[i] = best_cost_hist[j]
+                convergence_rate_GA[i] = np.abs(best_cost_hist[0] - cost_all_GA[i]) / t_sim_GA[i]
+                break
 
 idx_best = np.argmin(cost_all_GA)
 print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GA[idx_best], flush=True)
 
 print('\n\t*AF-STE', end='', flush=True)
-cost_all_AF_STE = np.zeros(180)
+cost_all_AF_STE = np.zeros(10)
+t_sim_AF_STE = np.zeros(10)
 for i in range(10):
-    with np.load(directory + "/RCWA_functions/RGB_color_router_broadband/AF_STE/RGB_color_router_IPR1_Ntrial18_Ndim100x100_D3_eta0.01_mfs7_try" + str(i + 1) + "_AF_STE_results.npz") as data:
-        cost_all_AF_STE[18*i:18*(i+1)] = np.min(data['cost_hist'], axis=0)
+    with np.load(directory + data_dir + "/AF_STE/RGB_color_router_IPR1_Ntrial18_Ndim100x100_D3_eta0.01_mfs7_try" + str(i + 1) + "_AF_STE_results.npz") as data:
+        cost_hist = data['cost_hist']
+        converged_iter = np.zeros(cost_hist.shape[1])
+        for k in range(cost_hist.shape[1]):
+            for j in range(cost_hist.shape[0]):
+                if j >= N_convergence and np.argmin(cost_hist[:,k]) <= (j - N_convergence):
+                    converged_iter[k] = j - N_convergence
+                    t_sim_AF_STE[i] += t_high_fidelity * (j - N_convergence)
+                    break
+        cost_all_AF_STE[i] = np.min(cost_hist[:np.max(converged_iter)+1,:])
 
 idx_best = np.argmin(cost_all_AF_STE)
 print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_AF_STE[idx_best], flush=True)
 
-np.savez(directory + '/RCWA_functions/RGB_color_router_broadband/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_mfs7_simulations',
+np.savez(directory + data_dir + '/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_mfs7_simulations',
     cost_all_GEGD=cost_all_GEGD,
     cost_all_BFGS=cost_all_BFGS,
     cost_all_BFGS_mfs=cost_all_BFGS_mfs,
     cost_all_sep_CMA_ES=cost_all_sep_CMA_ES,
     cost_all_GA=cost_all_GA,
     cost_all_AF_STE=cost_all_AF_STE,
+    t_sim_GEGD=t_sim_GEGD,
+    t_sim_BFGS=t_sim_BFGS,
+    t_sim_sep_CMA_ES=t_sim_sep_CMA_ES,
+    t_sim_GA=t_sim_GA,
+    t_sim_AF_STE=t_sim_AF_STE,
+    convergence_rate_GEGD=convergence_rate_GEGD,
+    convergence_rate_sep_CMA_ES=convergence_rate_sep_CMA_ES,
+    convergence_rate_GA=convergence_rate_GA,
+    convergence_rate_AF_STE=convergence_rate_AF_STE,
     lam=lam,
     x=x,
     x_up=x_up,

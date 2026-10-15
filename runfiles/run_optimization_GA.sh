@@ -1,30 +1,28 @@
 #!/bin/bash
 
 #SBATCH -o slurm/run_optimization.log-%j
-#SBATCH --partition=ghx4
-#SBATCH --job-name=ga1
+#SBATCH --job-name=ga8
 ##SBATCH --exclusive
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
 ##SBATCH --gres=gpu:h100:1
 #SBATCH --gpus-per-node=1
-#SBATCH --time=10:00:00
-#SBATCH --account=bhkk-dtai-gh
+#SBATCH --time=48:00:00
 
 export OMP_NUM_THREADS=20
 export OPENBLAS_NUM_THREADS=20
 export MKL_NUM_THREADS=20
 export NUMEXPR_NUM_THREADS=20
 
-module load python/miniforge3_pytorch/2.11.0
-conda activate base
-source /work/nvme/bhkk/smin2/myenv/bin/activate
+##source "$(dirname "$0")/env_seneca.sh"
+source "$(dirname "$0")/env_deltaAI.sh"
+##source "$(dirname "$0")/env_anvilAI.sh"
 
 ## Polarization Beamsplitter -----------------------------------------------------
-##: << 'END_COMMENT'
+: << 'END_COMMENT'
 python run_optimization_polarization_beamsplitter.py \
     --Nthreads 20 \
-    --n_seed 1 \
+    --n_seed 5 \
     --load_data 0 \
     --optimizer 'GA' \
     --Nensemble 20 \
@@ -35,7 +33,7 @@ python run_optimization_polarization_beamsplitter.py \
     --maxiter -1 \
     --min_feature_size 7 \
     --precision 'float64'
-##END_COMMENT
+END_COMMENT
 ## load_data = 1 for n_seed = 0, 1, 2, 3, 5
 
 ## RGB Coupler -----------------------------------------------------
@@ -44,31 +42,31 @@ python run_optimization_RGB_coupler.py \
     --Nthreads 20 \
     --n_seed 5 \
     --load_data 1 \
-    --optimizer 'AF_GA' \
+    --optimizer 'GA' \
     --Nensemble 20 \
     --Nx 60 \
     --Ny 263 \
     --symmetry 1 \
     --upsample_ratio 1 \
-    --maxiter 400 \
+    --maxiter -1 \
     --min_feature_size 7 \
     --precision 'float64'
 END_COMMENT
 
 ## RGB Color Router -----------------------------------------------------
-: << 'END_COMMENT'
+##: << 'END_COMMENT'
 python run_optimization_RGB_color_router.py \
     --Nthreads 20 \
-    --n_seed 9 \
+    --n_seed 8 \
     --load_data 0 \
-    --optimizer 'AF_GA' \
+    --optimizer 'GA' \
     --Nensemble 20 \
     --Nx 100 \
     --Ny 100 \
     --symmetry 3 \
     --upsample_ratio 1 \
-    --maxiter 400 \
+    --maxiter -1 \
     --min_feature_size 7 \
     --precision 'float64'
-END_COMMENT
+##END_COMMENT
 ## load_data = 1 for n_seed = 8

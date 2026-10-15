@@ -207,7 +207,7 @@ class optimizer:
                     self.time_hist = np.append(self.time_hist, t2 - t1)
                     break
             elif self.n_iter >= self.N_convergence:
-                if np.all(self.best_cost_hist[-self.N_convergence:] == self.best_cost_hist[-1]):
+                if np.all(self.best_cost_hist[-self.N_convergence:] <= self.best_cost_hist[-1] + 1e-3):
                     self.n_iter += 1
                     t2 = time.time()
                     self.time_hist = np.append(self.time_hist, t2 - t1)

@@ -37,7 +37,6 @@ os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
 
 import numpy as np
 from gegd.optimizer import TF_BFGS, AF_STE, GEGD, PSO, GA, sep_CMA_ES, CMA_ES
-from itertools import product
 import time
 
 optimization_algorithm = args.optimizer

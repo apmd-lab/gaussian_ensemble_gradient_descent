@@ -33,14 +33,14 @@ os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_ind)
 #os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 import numpy as np
-from gegd.optimizer import TF_BFGS, AF_STE, GEGD, AF_PSO, AF_GA, sep_CMA_ES
+from gegd.optimizer import TF_BFGS, AF_STE, GEGD, PSO, GA, sep_CMA_ES
 from itertools import product
 import time
 
 optimization_algorithm = args.optimizer
 Nthreads = args.Nthreads
 Nensemble = args.Nensemble
-maxiter = args.maxiter
+maxiter = args.maxiter if args.maxiter > 0 else None
 n_seed = args.n_seed
 load_data = args.load_data
 
@@ -128,7 +128,7 @@ cost_obj_high_fidelity.set_accuracy(high_fidelity_setting)
 cost_obj_low_fidelity.set_accuracy(low_fidelity_setting)
 
 if optimization_algorithm == 'TF_BFGS':
-    Ntrial = int(np.round(Nensemble/(t_fwd_AD/t_high_fidelity)))
+    Ntrial = Nensemble #int(np.round(Nensemble/(t_fwd_AD/t_high_fidelity)))
 
     output_filename = 'RGB_color_router_IPR' + str(int(1/IPR_exponent)) + '_Ntrial' + str(Ntrial) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
@@ -153,7 +153,7 @@ if optimization_algorithm == 'TF_BFGS':
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
 elif optimization_algorithm == 'AF_STE':
-    Ntrial = int(np.round(Nensemble/(t_fwd_AD/t_high_fidelity)))
+    Ntrial = Nensemble #int(np.round(Nensemble/(t_fwd_AD/t_high_fidelity)))
     eta = args.eta
 
     output_filename = 'RGB_color_router_IPR' + str(int(1/IPR_exponent)) + '_Ntrial' + str(Ntrial) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
@@ -220,7 +220,7 @@ elif optimization_algorithm == 'GEGD':
     T2 = time.time()
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
-elif optimization_algorithm == 'AF_PSO':
+elif optimization_algorithm == 'PSO':
     coeff_cognitive = 1.49
     coeff_social = 1.49
     coeff_inertia = 0.9
@@ -228,7 +228,7 @@ elif optimization_algorithm == 'AF_PSO':
     output_filename = 'RGB_color_router_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
-    optimizer = AF_PSO.optimizer(
+    optimizer = PSO.optimizer(
         Nx=Nx,
         Ny=Ny,
         Nswarm=Nensemble,
@@ -250,11 +250,11 @@ elif optimization_algorithm == 'AF_PSO':
     T2 = time.time()
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
-elif optimization_algorithm == 'AF_GA':
+elif optimization_algorithm == 'GA':
     output_filename = 'RGB_color_router_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
-    optimizer = AF_GA.optimizer(
+    optimizer = GA.optimizer(
         Nx=Nx,
         Ny=Ny,
         Nbatch=Nensemble,
