@@ -1,29 +1,16 @@
 import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
-sys.path.insert(0, directory[:-15])
+#sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
+#sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
+#sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent')
+sys.path.append('/home/x-smin2/gaussian_ensemble_gradient_descent')
+
+Nthreads = 128
 
 import numpy as np
-from scipy.ndimage import gaussian_filter
-import optimizer.brush_generator as brush
-from itertools import product
 import time
-import util.read_mat_data as rmd
-import optimizer.symmetry_operations as symOp
-import optimizer.density_transforms as dtf
-
-from mpi4py import MPI
-comm = MPI.COMM_WORLD
-
-import argparse
-parser = argparse.ArgumentParser()
-parser.add_argument('--Nthreads', type=int, default=1)
-args = parser.parse_args()
-
-Nthreads = args.Nthreads
-
-if not os.path.exists(directory[:-15] + "/results"):
-    os.mkdir(directory[:-15] + "/results")
+import gegd.parameter_processing.density_transforms as dtf
 
 # Geometry
 Nx = 70
@@ -136,12 +123,10 @@ sim_time = np.zeros((n_struct, upsampling_ratio_fdtd.size))
 sim_time_fwd_adj = np.zeros((n_struct, upsampling_ratio_fdtd.size))
 
 for nb in range(n_struct):
-    if comm.rank == 0:
-        print('\tStructure ' + str(nb), flush=True)
+    print('\tStructure ' + str(nb), flush=True)
 
     for nu in range(upsampling_ratio_fdtd.size):
-        if comm.rank == 0:
-            print('\t\tUpsampling Ratio: ' + str(upsampling_ratio_fdtd[nu]), end='', flush=True)
+        print('\t\tUpsampling Ratio: ' + str(upsampling_ratio_fdtd[nu]), end='', flush=True)
         cost_obj.set_accuracy(upsampling_ratio_fdtd[nu])
         x = x_brush_all[nb,:].reshape(Nx*upsample_ratio, Ny*upsample_ratio)
 
@@ -151,23 +136,19 @@ for nb in range(n_struct):
         sim_time[nb,nu] = t2 - t1
         
         cost_all[nb,nu] = cost
-        if comm.rank == 0:
-            print(' | Fwd Time: ' + str(sim_time[nb,nu]) + ' s', end='', flush=True)
+        print(' | Fwd Time: ' + str(sim_time[nb,nu]) + ' s', end='', flush=True)
         
         t1 = time.time()
         cost, jac = cost_obj.get_cost(x, True)
         t2 = time.time()
         sim_time_fwd_adj[nb,nu] = t2 - t1
 
-        if comm.rank == 0:
-            print(' | Fwd+Adj Time: ' + str(sim_time_fwd_adj[nb,nu]) + ' s', flush=True)
+        print(' | Fwd+Adj Time: ' + str(sim_time_fwd_adj[nb,nu]) + ' s', flush=True)
         
-        if comm.rank == 0:
-            np.savez("/mode_converter_convergence_test_brush" + str(brush_size) + "_Nx" + str(Nx) + "_Ny" + str(Ny),
-                cost_all=cost_all,
-                brush_time=brush_time,
-                sim_time=sim_time,
-                x_all=x_all,
-                x_brush_all=x_brush_all,
-                sim_time_fwd_adj=sim_time_fwd_adj
-            )
+        np.savez("mode_converter_convergence_test_ceviche_Nx" + str(Nx) + "_Ny" + str(Ny) + "_mfs" + str(min_feature_size),
+            cost_all=cost_all,
+            brush_time=brush_time,
+            sim_time=sim_time,
+            x_brush_all=x_brush_all,
+            sim_time_fwd_adj=sim_time_fwd_adj
+        )

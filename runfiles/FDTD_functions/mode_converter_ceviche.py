@@ -4,7 +4,7 @@ import sys
 sys.path.insert(0, directory[:-15])
 
 import numpy as np
-from scipy.ndimage import zoom
+from scipy.ndimage import zoom, gaussian_filter
 import matplotlib.pyplot as plt
 import time
 import subprocess
@@ -182,7 +182,7 @@ class custom_objective:
         return cost
     
     def get_cost(self, x, get_grad=False):
-        x_upsampled = zoom(x.reshape(self.Nx, self.Ny).astype(np.float64), self.upsampling_ratio, order=0)
+        x_upsampled = np.where(gaussian_filter(zoom(x.reshape(self.Nx, self.Ny).astype(np.float64), self.upsampling_ratio, order=1, mode='nearest'), sigma=self.upsampling_ratio, mode='nearest') > 0.5, 1, 0)
         
         density_design = npa.zeros_like(self.density_background).astype(npa.float64)
         density_design[
