@@ -102,6 +102,7 @@ print('### Running Simulations', flush=True)
 print('\n\t*GEGD', end='', flush=True)
 cost_all_GEGD = np.zeros(10)
 t_sim_GEGD = np.zeros(10)
+converged_iter_GEGD = np.zeros(10)
 convergence_rate_GEGD = np.zeros(10)
 for i in range(10):
     with np.load(directory + data_dir + "/GEGD/RGB_coupler_IPR1_Nensemble20_Ndim60x263_D1_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(i + 1) + "_GEGD_results.npz") as data:
@@ -109,7 +110,8 @@ for i in range(10):
         N_high_fidelity_hist = data['N_high_fidelity_hist']
         N_low_fidelity_hist = data['N_low_fidelity_hist']
         for j in range(best_cost_hist.size):
-            if j >= N_convergence and np.all(best_cost_hist[-N_convergence:] <= best_cost_hist[-1] + 1e-3):
+            if j >= N_convergence and np.all(best_cost_hist[j-N_convergence:] <= best_cost_hist[-1] + 1e-3):
+                converged_iter_GEGD[i] = j - N_convergence
                 t_sim_GEGD[i] = t_high_fidelity * np.sum(N_high_fidelity_hist[:j-N_convergence]) + t_low_fidelity * np.sum(N_low_fidelity_hist[:j-N_convergence])
                 cost_all_GEGD[i] = best_cost_hist[j]
                 convergence_rate_GEGD[i] = np.abs(best_cost_hist[0] - cost_all_GEGD[i]) / t_sim_GEGD[i]
@@ -149,7 +151,7 @@ for i in range(10):
     with np.load(directory + data_dir + "/sep_CMA_ES/RGB_coupler_IPR1_Nensemble20_Ndim60x263_D1_mfs7_try" + str(i + 1) + "_sep_CMA_ES_results.npz") as data:
         best_cost_hist = data['best_cost_hist']
         for j in range(best_cost_hist.size):
-            if j >= N_convergence and np.all(best_cost_hist[-N_convergence:] <= best_cost_hist[-1] + 1e-3):
+            if j >= N_convergence and np.all(best_cost_hist[j-N_convergence:] <= best_cost_hist[-1] + 1e-3):
                 t_sim_sep_CMA_ES[i] = 20 * t_high_fidelity * (j - N_convergence)
                 cost_all_sep_CMA_ES[i] = best_cost_hist[j]
                 convergence_rate_sep_CMA_ES[i] = np.abs(best_cost_hist[0] - cost_all_sep_CMA_ES[i]) / t_sim_sep_CMA_ES[i]
@@ -166,7 +168,7 @@ for i in range(10):
     with np.load(directory + data_dir + "/GA/RGB_coupler_IPR1_Nensemble20_Ndim60x263_D1_mfs7_try" + str(i + 1) + "_AF_GA_results.npz") as data:
         best_cost_hist = data['best_cost_hist']
         for j in range(best_cost_hist.size):
-            if j >= N_convergence and np.all(best_cost_hist[-N_convergence:] <= best_cost_hist[-1] + 1e-3):
+            if j >= N_convergence and np.all(best_cost_hist[j-N_convergence:] <= best_cost_hist[-1] + 1e-3):
                 t_sim_GA[i] = 20 * t_high_fidelity * (j - N_convergence)
                 cost_all_GA[i] = best_cost_hist[j]
                 convergence_rate_GA[i] = np.abs(best_cost_hist[0] - cost_all_GA[i]) / t_sim_GA[i]
@@ -184,7 +186,7 @@ for i in range(10):
         converged_iter = np.zeros(cost_hist.shape[1])
         for k in range(cost_hist.shape[1]):
             for j in range(cost_hist.shape[0]):
-                if j >= N_convergence and np.argmin(cost_hist[:,k]) <= (j - N_convergence):
+                if j >= N_convergence and np.argmin(cost_hist[:j,k]) <= (j - N_convergence):
                     converged_iter[k] = j - N_convergence
                     t_sim_AF_STE[i] += t_high_fidelity * (j - N_convergence)
                     break
