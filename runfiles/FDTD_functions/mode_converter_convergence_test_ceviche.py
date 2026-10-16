@@ -4,9 +4,10 @@ import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
 #sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
 #sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent')
-sys.path.append('/home/x-smin2/gaussian_ensemble_gradient_descent')
+#sys.path.append('/home/x-smin2/gaussian_ensemble_gradient_descent')
+sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
 
-Nthreads = 128
+Nthreads = 16
 
 import numpy as np
 import time
@@ -42,7 +43,7 @@ elif symmetry == 4:
 # (1) get_cost(x, get_grad) --> return cost & gradient(if get_grad==True)
 # (2) set_accuracy(setting)
 #--------------------------------------------------------------------------
-import FDTD_functions.mode_converter_ceviche as objfun
+import mode_converter_ceviche as objfun
 
 lam_tgt = 1.55
 
@@ -51,7 +52,7 @@ waveguide_width = 0.5 # in um
 
 dpix = design_dim[1]/Ny
 waveguide_width_npix = np.round(waveguide_width/dpix)
-if waveguide_width_npix < brush_size:
+if waveguide_width_npix < min_feature_size:
     print('\t!!! Waveguide width smaller than the minimum feature size !!!', flush=True)
     assert False
 if Ny % 2 == 0:
@@ -63,10 +64,10 @@ center_y = int(np.floor(Ny/2 + 0.5))
 waveguide_bottom = int(center_y - waveguide_halfwidth_npix)
 waveguide_top = int(waveguide_bottom + waveguide_width_npix)
 
-padding = -np.ones((Nx + 2*brush_size, Ny + 2*brush_size))
-padding[brush_size:-brush_size,brush_size:-brush_size] = 0
-padding[:brush_size,waveguide_bottom + brush_size:waveguide_top + brush_size] = 1
-padding[-brush_size:,waveguide_bottom + brush_size:waveguide_top + brush_size] = 1
+padding = -np.ones((Nx + 2*min_feature_size, Ny + 2*min_feature_size))
+padding[min_feature_size:-min_feature_size,min_feature_size:-min_feature_size] = 0
+padding[:min_feature_size,waveguide_bottom + min_feature_size:waveguide_top + min_feature_size] = 1
+padding[-min_feature_size:,waveguide_bottom + min_feature_size:waveguide_top + min_feature_size] = 1
 
 mat_padding = 'SiO2_bulk'
 mat_waveguide = 'Si_Schinke_Shkondin'
@@ -105,13 +106,12 @@ x_brush_all = dtf.binarize(
 t2 = time.time()
 brush_time = t2 - t1
 
-if comm.rank == 0:
-    np.savez("/mode_converter_convergence_test_brush" + str(brush_size) + "_Nx" + str(Nx) + "_Ny" + str(Ny),
-        brush_time=brush_time,
-        x_brush_all=x_brush_all,
-    )
+np.savez("mode_converter_convergence_test_ceviche_Nx" + str(Nx) + "_Ny" + str(Ny) + "_mfs" + str(min_feature_size),
+    brush_time=brush_time,
+    x_brush_all=x_brush_all,
+)
 
-upsampling_ratio_fdtd = np.linspace(0.2, 5.0, 25)
+upsampling_ratio_fdtd = np.round(np.linspace(0.2, 5.0, 25), 2)
 
 #with np.load(directory[:-15] + "/results/integrated_bandpass_filter_convergence_test_brush" + str(brush_size) + ".npz") as data:
 #    cost_all = data['cost_all']

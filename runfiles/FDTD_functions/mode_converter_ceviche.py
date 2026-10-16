@@ -1,7 +1,11 @@
 import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
-sys.path.insert(0, directory[:-15])
+#sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
+#sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
+sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent/runfiles')
+#sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent/runfiles')
+#sys.path.append('/home/x-smin2/gaussian_ensemble_gradient_descent/runfiles')
 
 import numpy as np
 from scipy.ndimage import zoom, gaussian_filter
@@ -19,9 +23,6 @@ Slice = collections.namedtuple('Slice', 'x y')
 
 #import warnings
 #warnings.filterwarnings('ignore')
-
-from mpi4py import MPI
-comm = MPI.COMM_WORLD
 
 c = 299792458
 um = 1e-6
@@ -56,7 +57,7 @@ class custom_objective:
         self.n_waveguide = np.real(mat_dict[mat_waveguide])[0]
 
         # Other Simulation Settings
-        self.pml_size = self.lam_tgt*um
+        self.pml_size = self.lam_tgt
         self.total_sim_time = total_sim_time*fs
         
     def set_accuracy(self, upsampling_ratio):
@@ -64,10 +65,10 @@ class custom_objective:
         self.resolution = self.upsampling_ratio/self.dx_pix
         
         ### Dimensions
-        self.Npml = int(self.pml_size*self.resolution)
-        self.Nlam_half = int(self.lam_tgt/2*self.resolution)
-        self.Nx_up = int(self.Nx*self.upsampling_ratio)
-        self.Ny_up = int(self.Ny*self.upsampling_ratio)
+        self.Npml = int(np.round(self.pml_size*self.resolution))
+        self.Nlam_half = int(np.round(self.lam_tgt/2*self.resolution))
+        self.Nx_up = int(np.round(self.Nx*self.upsampling_ratio))
+        self.Ny_up = int(np.round(self.Ny*self.upsampling_ratio))
         
         Sx = 2*self.Npml + 4*self.Nlam_half + self.Nx_up
         Sy = 2*self.Npml + 2*self.Nlam_half + self.Ny_up
@@ -169,7 +170,7 @@ class custom_objective:
         denom = npa.sqrt(npa.abs(npa.sum(npa.conj(Ez)*Ez))\
                         *npa.abs(npa.sum(npa.conj(self.monitor)*self.monitor)))
         
-        cost = numer/denom
+        cost = -numer/denom
         
 #        print(npa.abs(npa.sum(npa.conj(Ez)*self.monitor)), flush=True)
 #        print(npa.abs(npa.sum(npa.conj(Ez)*Ez)), flush=True)
@@ -182,7 +183,7 @@ class custom_objective:
         return cost
     
     def get_cost(self, x, get_grad=False):
-        x_upsampled = np.where(gaussian_filter(zoom(x.reshape(self.Nx, self.Ny).astype(np.float64), self.upsampling_ratio, order=1, mode='nearest'), sigma=self.upsampling_ratio, mode='nearest') > 0.5, 1, 0)
+        x_upsampled = np.where(gaussian_filter(zoom(x.reshape(self.Nx, self.Ny).astype(np.float64), (self.Nx_up/self.Nx, self.Ny_up/self.Ny), order=1, mode='nearest'), sigma=self.upsampling_ratio, mode='nearest') > 0.5, 1, 0)
         
         density_design = npa.zeros_like(self.density_background).astype(npa.float64)
         density_design[

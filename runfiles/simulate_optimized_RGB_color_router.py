@@ -2,8 +2,8 @@ import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
-#sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
-sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent')
+sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
+#sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent')
 
 import gc
 import jax
@@ -137,7 +137,7 @@ print('### Running Simulations', flush=True)
 print('\n\t*GEGD', end='', flush=True)
 cost_all_GEGD = np.zeros(10)
 t_sim_GEGD = np.zeros(10)
-converged_iter_GEGD = np.zeros(10)
+convergence_iter_GEGD = np.zeros(10)
 convergence_rate_GEGD = np.zeros(10)
 for i in range(10):
     with np.load(directory + data_dir + "/GEGD/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(i + 1) + "_GEGD_results.npz") as data:
@@ -145,9 +145,9 @@ for i in range(10):
         N_high_fidelity_hist = data['N_high_fidelity_hist']
         N_low_fidelity_hist = data['N_low_fidelity_hist']
         for j in range(best_cost_hist.size):
-            if j >= N_convergence and np.all(best_cost_hist[j-N_convergence:] <= best_cost_hist[-1] + 1e-3):
-                converged_iter_GEGD[i] = j - N_convergence
-                t_sim_GEGD[i] = t_high_fidelity * np.sum(N_high_fidelity_hist[:j-N_convergence]) + t_low_fidelity * np.sum(N_low_fidelity_hist[:j-N_convergence])
+            if j >= N_convergence and np.all(best_cost_hist[j-N_convergence+1:j] <= best_cost_hist[j] + 1e-3):
+                convergence_iter_GEGD[i] = j - N_convergence + 1
+                t_sim_GEGD[i] = t_high_fidelity * np.sum(N_high_fidelity_hist[:j-N_convergence+1]) + t_low_fidelity * np.sum(N_low_fidelity_hist[:j-N_convergence+1])
                 cost_all_GEGD[i] = best_cost_hist[j]
                 convergence_rate_GEGD[i] = np.abs(best_cost_hist[0] - cost_all_GEGD[i]) / t_sim_GEGD[i]
                 break
@@ -169,7 +169,7 @@ cost_all_BFGS = np.zeros(10)
 cost_all_BFGS_mfs = np.zeros(10)
 t_sim_BFGS = np.zeros(10)
 for i in range(10):
-    with np.load(directory + data_dir + "/TF_BFGS/RGB_color_router_IPR1_Ntrial18_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_TF_results.npz") as data:
+    with np.load(directory + data_dir + "/TF_BFGS/RGB_color_router_IPR1_Ntrial20_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_TF_results.npz") as data:
         cost_fin = data['cost_fin']
         cost_hist = data['cost_hist']
         cost_all_BFGS[i] = np.min(cost_fin[0,:])
@@ -188,8 +188,8 @@ for i in range(10):
     with np.load(directory + data_dir + "/sep_CMA_ES/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_sep_CMA_ES_results.npz") as data:
         best_cost_hist = data['best_cost_hist']
         for j in range(best_cost_hist.size):
-            if j >= N_convergence and np.all(best_cost_hist[j-N_convergence:] <= best_cost_hist[-1] + 1e-3):
-                t_sim_sep_CMA_ES[i] = 20 * t_high_fidelity * (j - N_convergence)
+            if j >= N_convergence and np.all(best_cost_hist[j-N_convergence+1:j] <= best_cost_hist[j] + 1e-3):
+                t_sim_sep_CMA_ES[i] = 20 * t_high_fidelity * (j - N_convergence + 1)
                 cost_all_sep_CMA_ES[i] = best_cost_hist[j]
                 convergence_rate_sep_CMA_ES[i] = np.abs(best_cost_hist[0] - cost_all_sep_CMA_ES[i]) / t_sim_sep_CMA_ES[i]
                 break
@@ -205,8 +205,8 @@ for i in range(10):
     with np.load(directory + data_dir + "/GA/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_mfs7_try" + str(i + 1) + "_AF_GA_results.npz") as data:
         best_cost_hist = data['best_cost_hist']
         for j in range(best_cost_hist.size):
-            if j >= N_convergence and np.all(best_cost_hist[j-N_convergence:] <= best_cost_hist[-1] + 1e-3):
-                t_sim_GA[i] = 20 * t_high_fidelity * (j - N_convergence)
+            if j >= N_convergence and np.all(best_cost_hist[j-N_convergence+1:j] <= best_cost_hist[j] + 1e-3):
+                t_sim_GA[i] = 20 * t_high_fidelity * (j - N_convergence + 1)
                 cost_all_GA[i] = best_cost_hist[j]
                 convergence_rate_GA[i] = np.abs(best_cost_hist[0] - cost_all_GA[i]) / t_sim_GA[i]
                 break
@@ -218,7 +218,7 @@ print('\n\t*AF-STE', end='', flush=True)
 cost_all_AF_STE = np.zeros(10)
 t_sim_AF_STE = np.zeros(10)
 for i in range(10):
-    with np.load(directory + data_dir + "/AF_STE/RGB_color_router_IPR1_Ntrial18_Ndim100x100_D3_eta0.01_mfs7_try" + str(i + 1) + "_AF_STE_results.npz") as data:
+    with np.load(directory + data_dir + "/AF_STE/RGB_color_router_IPR1_Ntrial20_Ndim100x100_D3_eta0.01_mfs7_try" + str(i + 1) + "_AF_STE_results.npz") as data:
         cost_hist = data['cost_hist']
         converged_iter = np.zeros(cost_hist.shape[1])
         for k in range(cost_hist.shape[1]):
@@ -227,7 +227,7 @@ for i in range(10):
                     converged_iter[k] = j - N_convergence
                     t_sim_AF_STE[i] += t_high_fidelity * (j - N_convergence)
                     break
-        cost_all_AF_STE[i] = np.min(cost_hist[:np.max(converged_iter)+1,:])
+        cost_all_AF_STE[i] = np.min(cost_hist[:int(np.max(converged_iter)+1),:])
 
 idx_best = np.argmin(cost_all_AF_STE)
 print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_AF_STE[idx_best], flush=True)
