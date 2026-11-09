@@ -3,7 +3,6 @@ directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
 #sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
-sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent')
 sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent/runfiles')
 
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -304,7 +303,7 @@ class custom_objective:
             amplitudes_interior=amplitudes_interior,
             layer_solve_results=layer_solve_results,
             layer_thicknesses=thicknesses,
-            layer_znum=[int(jnp.ceil(t / 0.01)) for t in thicknesses],
+            layer_znum=[int(jnp.ceil(t / 0.05)) for t in thicknesses],
             x=x,
             y=y,
         )

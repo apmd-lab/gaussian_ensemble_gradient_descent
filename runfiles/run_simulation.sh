@@ -14,10 +14,10 @@ export OPENBLAS_NUM_THREADS=20
 export MKL_NUM_THREADS=20
 export NUMEXPR_NUM_THREADS=20
 
-source "${SLURM_SUBMIT_DIR:-$(dirname "$0")}/env_seneca.sh"
-##source "$(dirname "$0")/env_deltaAI.sh"
+##source "${SLURM_SUBMIT_DIR:-$(dirname "$0")}/env_seneca.sh"
+source "${SLURM_SUBMIT_DIR:-$(dirname "$0")}/env_deltaAI.sh"
 ##source "${SLURM_SUBMIT_DIR:-$(dirname "$0")}/env_anvilAI.sh"
 
 ##python simulate_optimized_polarization_beamsplitter.py
-##python simulate_optimized_RGB_coupler.py
-python simulate_optimized_RGB_color_router.py
+python simulate_optimized_RGB_coupler.py
+##python simulate_optimized_RGB_color_router.py

@@ -1,8 +1,7 @@
 #!/bin/bash
 
 #SBATCH -o slurm/run_optimization.log-%j
-#SBATCH --job-name=sepcmaes2
-##SBATCH --exclusive
+#SBATCH --job-name=sepcmaes3
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
 ##SBATCH --gres=gpu:h100:1
@@ -15,11 +14,11 @@ export MKL_NUM_THREADS=20
 export NUMEXPR_NUM_THREADS=20
 
 ##source "$(dirname "$0")/env_seneca.sh"
-source "$(dirname "$0")/env_deltaAI.sh"
+source "${SLURM_SUBMIT_DIR:-$(dirname "$0")}/env_deltaAI.sh"
 ##source "$(dirname "$0")/env_anvilAI.sh"
 
 ## Polarization Beamsplitter -----------------------------------------------------
-##: << 'END_COMMENT'
+: << 'END_COMMENT'
 python run_optimization_polarization_beamsplitter.py \
     --Nthreads 20 \
     --n_seed 2 \
@@ -33,14 +32,14 @@ python run_optimization_polarization_beamsplitter.py \
     --maxiter -1 \
     --min_feature_size 7 \
     --precision 'float64'
-##END_COMMENT
+END_COMMENT
 
 ## RGB Coupler -----------------------------------------------------
-: << 'END_COMMENT'
+##: << 'END_COMMENT'
 python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimization_RGB_coupler.py \
-    --Nthreads 8 \
-    --n_seed 0 \
-    --load_data 0 \
+    --Nthreads 20 \
+    --n_seed 3 \
+    --load_data 1 \
     --optimizer 'sep_CMA_ES' \
     --Nensemble 20 \
     --Nx 60 \
@@ -50,7 +49,7 @@ python /home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles/run_optimiz
     --maxiter -1 \
     --min_feature_size 7 \
     --precision 'float64'
-END_COMMENT
+##END_COMMENT
 
 ## RGB Color Router -----------------------------------------------------
 : << 'END_COMMENT'

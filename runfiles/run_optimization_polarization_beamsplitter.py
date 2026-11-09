@@ -210,6 +210,7 @@ elif optimization_algorithm == 'GEGD':
         cost_threshold=cost_threshold,
         cost_obj_high_fidelity=cost_obj_high_fidelity,
         cost_obj_low_fidelity=cost_obj_low_fidelity,
+        use_momentum=True,
         use_ctrlVar=True,
         Nthreads=Nthreads,
         cuda_ind=cuda_ind,

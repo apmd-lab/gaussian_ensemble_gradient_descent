@@ -1,10 +1,9 @@
 #!/bin/bash
 
 #SBATCH -o slurm/run_optimization.log-%j
-#SBATCH --job-name=gegd8
-##SBATCH --exclusive
+#SBATCH --job-name=gegd9
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=10
+#SBATCH --cpus-per-task=72
 ##SBATCH --gres=gpu:h100-80:1
 #SBATCH --gpus-per-node=1
 #SBATCH --time=48:00:00
@@ -15,36 +14,35 @@ export MKL_NUM_THREADS=72
 export NUMEXPR_NUM_THREADS=72
 
 ##source "$(dirname "$0")/env_seneca.sh"
-source "$(dirname "$0")/env_deltaAI.sh"
+source "${SLURM_SUBMIT_DIR:-$(dirname "$0")}/env_deltaAI.sh"
 ##source "$(dirname "$0")/env_anvilAI.sh"
 
 ## Polarization Beamsplitter -----------------------------------------------------
-: << 'END_COMMENT'
+##: << 'END_COMMENT'
 python run_optimization_polarization_beamsplitter.py \
     --Nthreads 72 \
     --n_seed 9 \
-    --load_data 1 \
+    --load_data 0 \
     --optimizer 'GEGD' \
     --Nensemble 20 \
     --Nx 45 \
     --Ny 90 \
     --symmetry 1 \
     --upsample_ratio 1 \
-    --coeff_exp 20 \
+    --coeff_exp 30 \
     --maxiter -1 \
     --sigma_ensemble 1e-2 \
     --eta 5e-5 \
     --min_feature_size 7 \
     --precision 'float64'
-END_COMMENT
-## load_data = 1 for n_seed = 1, 3, 4, 5, 6, 9
+##END_COMMENT
 
 ## RGB Coupler -----------------------------------------------------
 : << 'END_COMMENT'
 python run_optimization_RGB_coupler.py \
-    --Nthreads 32 \
-    --n_seed 9 \
-    --load_data 1 \
+    --Nthreads 72 \
+    --n_seed 7 \
+    --load_data 0 \
     --optimizer 'GEGD' \
     --Nensemble 20 \
     --Nx 60 \
@@ -58,14 +56,13 @@ python run_optimization_RGB_coupler.py \
     --min_feature_size 7 \
     --precision 'float64'
 END_COMMENT
-## load_data = 1 for n_seed = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
 
 ## RGB Color Router -----------------------------------------------------
-##: << 'END_COMMENT'
+: << 'END_COMMENT'
 python run_optimization_RGB_color_router.py \
     --Nthreads 72 \
-    --n_seed 8 \
-    --load_data 1 \
+    --n_seed 9 \
+    --load_data 0 \
     --optimizer 'GEGD' \
     --Nensemble 20 \
     --Nx 100 \
@@ -78,5 +75,4 @@ python run_optimization_RGB_color_router.py \
     --eta 5e-5 \
     --min_feature_size 7 \
     --precision 'float64'
-##END_COMMENT
-## load_data = 1 for n_seed = 1, 2, 3, 4, 5, 6, 7, 8
+END_COMMENT

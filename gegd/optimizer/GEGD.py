@@ -5,6 +5,7 @@ from scipy.interpolate import interpn
 from itertools import product
 import gegd.parameter_processing.symmetry_operations as symOp
 import gegd.parameter_processing.density_transforms as dtf
+from gegd.parameter_processing.binary_design_analysis import pairwise_Hamming_distance, Betti_numbers, graph_reduction, get_feature_size_distribution
 import time
 
 from mpi4py import MPI
@@ -33,6 +34,7 @@ class optimizer:
                  cost_threshold=0,
                  cost_obj_high_fidelity=None,
                  cost_obj_low_fidelity=None,
+                 use_momentum=True,
                  use_ctrlVar=True,
                  Nthreads=1,
                  cuda_ind=0,
@@ -63,6 +65,7 @@ class optimizer:
         self.cost_threshold = cost_threshold
         self.cost_obj_high_fidelity = cost_obj_high_fidelity
         self.cost_obj_low_fidelity = cost_obj_low_fidelity
+        self.use_momentum = use_momentum
         self.use_ctrlVar = use_ctrlVar
         self.Nthreads = Nthreads
         self.cuda_ind = cuda_ind
@@ -558,7 +561,7 @@ class optimizer:
         
             return cost_all, density_all, grad_STE, grad_ensemble
         else:
-            return mu_fp, sigma_fp, np.mean(f), np.std(f), np.mean(f_ctrl_all), np.std(f_ctrl_all), jac_latent_ensemble, ctrlVarCoeff_mu, ctrlVarCoeff_sigma, corr_f, corr_mu, corr_sigma, f_best, x_best
+            return mu_fp, sigma_fp, np.mean(f), np.std(f), np.mean(f_ctrl_all), np.std(f_ctrl_all), jac_latent_ensemble, ctrlVarCoeff_mu, ctrlVarCoeff_sigma, corr_f, corr_mu, corr_sigma, f_best, x_best, x_sample
     
     def ADAM(self,
              x_bounded,
@@ -626,7 +629,8 @@ class optimizer:
 
             mu = x_bounded[:self.Ndim]
             sigma = x_bounded[self.Ndim:]
-            mu_fp, sigma_fp, loss_mean, loss_std, loss_ctrl_mean, loss_ctrl_std, jac, ctrlVarCoeff_mu, ctrlVarCoeff_sigma, corr_f, corr_mu, corr_sigma, f_best, x_best = self.ensemble_jacobian(
+            mu_fp, sigma_fp, loss_mean, loss_std, loss_ctrl_mean, loss_ctrl_std, jac, ctrlVarCoeff_mu, ctrlVarCoeff_sigma, \
+                corr_f, corr_mu, corr_sigma, f_best, x_best, x_sample = self.ensemble_jacobian(
                 x_bounded,
                 False,
             )
@@ -642,11 +646,46 @@ class optimizer:
             jac[ub==lb] = 0
             jac[mask_bound] *= np.exp(-x[mask_bound])*(ub[mask_bound] - lb[mask_bound])/(1 + np.exp(-x[mask_bound]))**2
             
+            # Compute Minimum Feature Size
+            fs_solid, fs_void = get_feature_size_distribution(x_best, self.Nx * self.upsample_ratio, self.Ny * self.upsample_ratio, self.periodic)
+            mean_fs_solid = np.mean(fs_solid[fs_solid > 0])
+            mean_fs_void = np.mean(fs_void[fs_void > 0])
+
+            # Compute Ensemble Stats
+            _, topoIPR_Betti = Betti_numbers(x_sample, self.Nx * self.upsample_ratio, self.Ny * self.upsample_ratio, self.periodic)
+            _, topoIPR_graph = graph_reduction(x_sample, self.Nx * self.upsample_ratio, self.Ny * self.upsample_ratio, self.periodic)
+            mean_pairwise_Hamming_dist, _ = pairwise_Hamming_distance(x_sample)
+
             self.N_high_fidelity_hist = np.append(self.N_high_fidelity_hist, self.Nensemble)
             self.N_low_fidelity_hist = np.append(self.N_low_fidelity_hist, self.r_CV*self.Nensemble)
             self.var_reduction_hist = np.append(self.var_reduction_hist, var_reduction)
             self.N_eff_hist = np.append(self.N_eff_hist, int(1/var_reduction))
             
+            self.mean_fs_solid_hist = np.append(self.mean_fs_solid_hist, mean_fs_solid)
+            self.mean_fs_void_hist = np.append(self.mean_fs_void_hist, mean_fs_void)
+            self.topoIPR_Betti_hist = np.append(self.topoIPR_Betti_hist, topoIPR_Betti)
+            self.topoIPR_graph_hist = np.append(self.topoIPR_graph_hist, topoIPR_graph)
+            self.mean_pairwise_Hamming_dist_hist = np.append(self.mean_pairwise_Hamming_dist_hist, mean_pairwise_Hamming_dist)
+
+            if self.save_ensemble_stats:
+                x_sample = x_sample.astype(np.uint8)
+                if self.x_sample_hist is None:
+                    self.x_sample_hist = x_sample.copy()
+                elif self.x_sample_hist.ndim == 2:
+                    ndiff = self.x_sample_hist.shape[0] - x_sample.shape[0]
+                    if ndiff < 0:
+                        self.x_sample_hist = np.concatenate((self.x_sample_hist, np.zeros((-ndiff, self.Nx * self.Ny * self.upsample_ratio**2), dtype=np.uint8)), axis=0)
+                    elif ndiff > 0:
+                        x_sample = np.concatenate((x_sample, np.zeros((ndiff, self.Nx * self.Ny * self.upsample_ratio**2), dtype=np.uint8)), axis=0)
+                    self.x_sample_hist = np.stack((self.x_sample_hist, x_sample), axis=0)
+                else:
+                    ndiff = self.x_sample_hist.shape[1] - x_sample.shape[0]
+                    if ndiff < 0:
+                        self.x_sample_hist = np.concatenate((self.x_sample_hist, np.zeros((self.x_sample_hist.shape[0], -ndiff, self.Nx * self.Ny * self.upsample_ratio**2), dtype=np.uint8)), axis=1)
+                    elif ndiff > 0:
+                        x_sample = np.concatenate((x_sample, np.zeros((ndiff, self.Nx * self.Ny * self.upsample_ratio**2), dtype=np.uint8)), axis=0)
+                    self.x_sample_hist = np.concatenate((self.x_sample_hist, x_sample[None,:,:]), axis=0)
+
             if self.x_latent_hist is None:
                 self.x_latent_hist = x_bounded[:self.Ndim].copy()
             else:
@@ -663,7 +702,8 @@ class optimizer:
             else:
                 new_best = self.best_cost_hist[-1] > f_best
                 self.best_cost_hist = np.append(self.best_cost_hist, np.min((self.best_cost_hist[-1], f_best)))
-                
+            
+            x_best = x_best.astype(np.uint8)
             if self.best_x_hist is None:
                 self.best_x_hist = x_best.copy()
             else:
@@ -725,38 +765,23 @@ class optimizer:
             degree_of_binarization = np.max((np.mean(mu_fp[mu_fp >= 0]), np.mean(-mu_fp[mu_fp <= 0])))
             
             if comm.rank == 0:
-                if self.Nsigma == 1:
-                    print('    | %4d |  %4d |   %4d  | %7.5f | %7.5f |  %5.2f  | %7.4f | %7.4f |  %9.2f |  %9.2f  |  %8.3f | %7.2f |' %(
-                        self.n_iter,
-                        self.Nensemble,
-                        self.r_CV*self.Nensemble,
-                        var_reduction,
-                        sigma_fp[0] if self.covariance_type == 'gaussian_constant' else np.min(np.exp(-mu**2 / (2 * sigma_fp**2))),
-                        ctrlVarCoeff_mu,
-                        np.mean(corr_f),
-                        np.mean(corr_mu),
-                        -np.log10(-loss_mean),
-                        -np.log10(-loss_ctrl_mean),
-                        self.best_cost_hist[-1],
-                        degree_of_binarization,
-                        ),
-                        end='', flush=True)
-                
-                else:
-                    print('    | %4d |  %4d |   %4d  | %7.5f | %10.2f | %13.2f | %7.4f | %8.4f | %11.4f |  %9.2f |  %9.2f  |  %8.3f |' %(
-                        self.n_iter,
-                        self.Nensemble,
-                        self.r_CV*self.Nensemble,
-                        var_reduction,
-                        ctrlVarCoeff_mu,
-                        ctrlVarCoeff_sigma,
-                        np.mean(corr_f),
-                        np.mean(corr_mu),
-                        np.mean(corr_sigma),
-                        -np.log(-loss_mean)/self.coeff_exp,
-                        -np.log(-loss_ctrl_mean)/self.coeff_exp,
-                        self.best_cost_hist[-1]),
-                        end='', flush=True)
+                print('    | %4d |  %3d/%3d | %5.3f | %4.2f/%4.2f |  %6.4f/%6.4f | %8.6f |  %4.2f/%4.2f |  %9.2f/%9.2f  | %11.2f |' %(
+                    self.n_iter,
+                    self.Nensemble,
+                    self.r_CV*self.Nensemble,
+                    sigma_fp[0] if self.covariance_type == 'gaussian_constant' else np.min(np.exp(-mu**2 / (2 * sigma_fp**2))),
+                    np.mean(corr_f),
+                    np.mean(corr_mu),
+                    -np.log10(-loss_mean),
+                    -np.log10(-loss_ctrl_mean),
+                    self.best_cost_hist[-1],
+                    mean_fs_solid,
+                    mean_fs_void,
+                    topoIPR_Betti,
+                    topoIPR_graph,
+                    mean_pairwise_Hamming_dist,
+                    ),
+                    end='', flush=True)
             
             self.save_data(x_bounded=x_bounded,
                            jac_mean=jac_mean,
@@ -775,46 +800,58 @@ class optimizer:
                     t2 = time.time()
                     self.time_hist = np.append(self.time_hist, t2 - t1)
                     break
+            
+            if self.use_momentum:
+                # Update Average Gradients
+                jac_mean = beta_ADAM1*jac_mean + (1 - beta_ADAM1)*jac
+                jac_var = beta_ADAM2*jac_var + (1 - beta_ADAM2)*jac**2
                 
-            # Update Average Gradients
-            jac_mean = beta_ADAM1*jac_mean + (1 - beta_ADAM1)*jac
-            jac_var = beta_ADAM2*jac_var + (1 - beta_ADAM2)*jac**2
+                # Unbias Average Gradients
+                jac_mean_unbiased = jac_mean/(1 - beta_ADAM1**adam_iter)
+                jac_var_unbiased = jac_var/(1 - beta_ADAM2**adam_iter)
+                
+                # Update Variables
+                if self.n_iter == 0:
+                    x_bounded_norm_ref = 1
+                    x_bounded_norm = 1
+                elif self.n_iter == 1:
+                    x_bounded_norm_ref = np.linalg.norm(x_bounded[:self.Ndim])
+                    x_bounded_norm = np.linalg.norm(x_bounded[:self.Ndim])
+                else:
+                    x_bounded_norm = np.linalg.norm(x_bounded[:self.Ndim])
+
+                #eta_sched = eta_ADAM.copy()
+                eta_sched = eta_ADAM*(x_bounded_norm/x_bounded_norm_ref)**(1/3)
+                if comm.rank == 0:
+                    print(' %8.4f | %7.5f |   %5.2f   |' %(x_bounded_norm, eta_sched[0], t_rem), flush=True)
+                x -= eta_sched*jac_mean_unbiased/(np.sqrt(jac_var_unbiased) + 1e-8)
+                # eta *= 0.95
+                
+                self.x_bounded_norm_hist = np.append(self.x_bounded_norm_hist, x_bounded_norm)
+                self.eta_sched_hist = np.append(self.eta_sched_hist, eta_sched[0])
             
-            # Unbias Average Gradients
-            jac_mean_unbiased = jac_mean/(1 - beta_ADAM1**adam_iter)
-            jac_var_unbiased = jac_var/(1 - beta_ADAM2**adam_iter)
-            
-            # Update Variables
-            if self.n_iter == 0:
-                x_bounded_norm_ref = 1
-                x_bounded_norm = 1
-            elif self.n_iter == 1:
-                x_bounded_norm_ref = np.linalg.norm(x_bounded[:self.Ndim])
-                x_bounded_norm = np.linalg.norm(x_bounded[:self.Ndim])
             else:
                 x_bounded_norm = np.linalg.norm(x_bounded[:self.Ndim])
-
-            #eta_sched = eta_ADAM.copy()
-            eta_sched = eta_ADAM*(x_bounded_norm/x_bounded_norm_ref)**(1/3)
-            if comm.rank == 0:
-                print('  %6.4f  | %7.5f |   %5.2f   |' %(x_bounded_norm, eta_sched[0], t_rem), flush=True)
-            x -= eta_sched*jac_mean_unbiased/(np.sqrt(jac_var_unbiased) + 1e-8)
-            # eta *= 0.95
-            
-            self.x_bounded_norm_hist = np.append(self.x_bounded_norm_hist, x_bounded_norm)
-            self.eta_sched_hist = np.append(self.eta_sched_hist, eta_sched[0])
+                x -= eta_ADAM * jac / np.linalg.norm(jac)
+                if comm.rank == 0:
+                    print(' %8.4f | %7.5f |   %5.2f   |' %(x_bounded_norm, eta_ADAM[0], t_rem), flush=True)
+                
+                self.x_bounded_norm_hist = np.append(self.x_bounded_norm_hist, x_bounded_norm)
+                self.eta_sched_hist = np.append(self.eta_sched_hist, eta_ADAM[0])
+                x_bounded_norm_ref = 0
             
             self.n_iter += 1
 
             t2 = time.time()
             self.time_hist = np.append(self.time_hist, t2 - t1)
 
-    def run(self, n_seed, output_filename, x0=None, eta_mu=0.01, eta_sigma=1.0, load_data=False):
+    def run(self, n_seed, output_filename, x0=None, eta_mu=0.01, eta_sigma=1.0, load_data=False, save_ensemble_stats=False):
         if comm.rank == 0 and self.verbosity >= 1:
             print('### GEGD (seed = ' + str(n_seed) + ')\n', flush=True)
     
         np.random.seed(n_seed)
         self.output_filename = output_filename
+        self.save_ensemble_stats = save_ensemble_stats
 
         lb = np.zeros(self.Ndim+self.Nsigma)
         lb[:self.Ndim] = -np.inf
@@ -834,6 +871,11 @@ class optimizer:
                 self.N_low_fidelity_hist = data['N_low_fidelity_hist'][:self.n_iter]
                 self.var_reduction_hist = data['var_reduction_hist'][:self.n_iter]
                 self.N_eff_hist = data['N_eff_hist'][:self.n_iter]
+                self.mean_fs_solid_hist = data['mean_fs_solid_hist'][:self.n_iter]
+                self.mean_fs_void_hist = data['mean_fs_void_hist'][:self.n_iter]
+                self.topoIPR_Betti_hist = data['topoIPR_Betti_hist'][:self.n_iter]
+                self.topoIPR_graph_hist = data['topoIPR_graph_hist'][:self.n_iter]
+                self.mean_pairwise_Hamming_dist_hist = data['mean_pairwise_Hamming_dist_hist'][:self.n_iter]
                 self.cost_ensemble_hist = data['cost_ensemble_hist'][:self.n_iter]
                 self.cost_ensemble_ctrl_hist = data['cost_ensemble_ctrl_hist'][:self.n_iter]
                 self.best_cost_hist = data['best_cost_hist'][:self.n_iter]
@@ -853,6 +895,10 @@ class optimizer:
                 
             with np.load(data_file2) as data:
                 self.x_latent_hist = data['x_latent_hist'][:self.n_iter,:]
+                if self.save_ensemble_stats:
+                    self.x_sample_hist = data['x_sample_hist'][:self.n_iter,:,:]
+                else:
+                    self.x_sample_hist = 0
                 self.mu_fp_hist = data['mu_fp_hist'][:self.n_iter,:]
                 self.best_x_hist = data['best_x_hist'][:self.n_iter,:]
                 if self.Nsigma > 1:
@@ -873,6 +919,15 @@ class optimizer:
             self.N_low_fidelity_hist = np.zeros(0)
             self.var_reduction_hist = np.zeros(0)
             self.N_eff_hist = np.zeros(0)
+            self.mean_fs_solid_hist = np.zeros(0)
+            self.mean_fs_void_hist = np.zeros(0)
+            self.topoIPR_Betti_hist = np.zeros(0)
+            self.topoIPR_graph_hist = np.zeros(0)
+            self.mean_pairwise_Hamming_dist_hist = np.zeros(0)
+            if self.save_ensemble_stats:
+                self.x_sample_hist = None
+            else:
+                self.x_sample_hist = 0
             self.x_latent_hist = None
             self.mu_fp_hist = None
             self.best_x_hist = None
@@ -909,12 +964,8 @@ class optimizer:
             x_bounded_norm_ref = None
         
         if comm.rank == 0 and self.verbosity >= 1:
-            if self.Nsigma == 1:
-                print('    | Iter | N_acc | N_inacc | var_red |  sigma  | CVCoeff | corr(f) | corr(g) |  Cost Ens  | Cost Ens CV | Cost Best | Deg Bin |  x norm  | ADAM_LR | t_rem(hr) |',
-                      flush=True)
-            else:
-                print('    | Iter | N_acc | N_inacc | var_red | CVCoeff_mu | CVCoeff_sigma | corr(f) | corr(mu) | corr(sigma) |  Cost Ens  | Cost Ens CV | Cost Best |  x norm  | ADAM_LR | t_rem(hr) |',
-                      flush=True)
+            print('    | Iter | N(HF/LF) | stdev | corr(f/g) | EnsCost(HF/LF) | BestCost | avgFS(s/v) | TopoIPR(Betti/graph) | avgHammDist | norm(mu) | ADAM_LR | t_rem(hr) |',
+                  flush=True)
 
         eta_ADAM = np.ones(self.Ndim+self.Nsigma)
         eta_ADAM[:self.Ndim] = eta_mu
@@ -939,87 +990,57 @@ class optimizer:
                     jac_var = data['jac_var']
 
             # Customize below
-            if self.Nsigma == 1:
-                if self.mu_fp_hist.ndim == 1:
-                    mu_fp_hist_final = self.mu_fp_hist.copy()
-                    x_latent_final = self.x_latent_hist.copy()
-                    best_x_final = self.best_x_hist.copy()
-                else:
-                    mu_fp_hist_final = self.mu_fp_hist[-1,:]
-                    x_latent_final = self.x_latent_hist[-1,:]
-                    best_x_final = self.best_x_hist[-1,:]
-
-                np.savez(self.output_filename + "_GEGD_results",
-                         N_high_fidelity_hist=self.N_high_fidelity_hist,
-                         N_low_fidelity_hist=self.N_low_fidelity_hist,
-                         var_reduction_hist=self.var_reduction_hist,
-                         N_eff_hist=self.N_eff_hist,
-                         cost_ensemble_hist=self.cost_ensemble_hist,
-                         cost_ensemble_sigma_hist=self.cost_ensemble_sigma_hist,
-                         cost_ensemble_ctrl_hist=self.cost_ensemble_ctrl_hist,
-                         cost_ensemble_ctrl_sigma_hist=self.cost_ensemble_ctrl_sigma_hist,
-                         best_cost_hist=self.best_cost_hist,
-                         ctrlVarCoeff_mu_hist=self.ctrlVarCoeff_mu_hist,
-                         ctrlVarCoeff_sigma_hist=self.ctrlVarCoeff_sigma_hist,
-                         corr_f_hist=self.corr_f_hist,
-                         x_bounded_norm_hist=self.x_bounded_norm_hist,
-                         eta_sched_hist=self.eta_sched_hist,
-                         time_hist=self.time_hist,
-                         sigma_hist=self.sigma_hist,
-                         n_iter=self.n_iter,
-                         mu_fp_hist_final=mu_fp_hist_final,
-                         x_latent_final=x_latent_final,
-                         best_x_final=best_x_final,
-                         adam_iter=adam_iter,
-                         x_bounded_norm_ref=x_bounded_norm_ref,
-                         )
-                         
-                np.savez(self.output_filename + "_GEGD_density_hist",
-                         mu_fp_hist=self.mu_fp_hist,
-                         sigma_fp_hist=self.sigma_fp_hist,
-                         x_latent_hist=self.x_latent_hist,
-                         best_x_hist=self.best_x_hist,
-                         corr_mu_hist=self.corr_mu_hist,
-                         corr_sigma_hist=self.corr_sigma_hist,
-                         x_bounded=x_bounded,
-                         jac_mean=jac_mean,
-                         jac_var=jac_var,
-                         )
-            
+            if self.mu_fp_hist.ndim == 1:
+                mu_fp_hist_final = self.mu_fp_hist.copy()
+                x_latent_final = self.x_latent_hist.copy()
+                best_x_final = self.best_x_hist.copy()
             else:
-                np.savez(self.output_filename + "_GEGD_results",
-                         N_high_fidelity_hist=self.N_high_fidelity_hist,
-                         N_low_fidelity_hist=self.N_low_fidelity_hist,
-                         var_reduction_hist=self.var_reduction_hist,
-                         N_eff_hist=self.N_eff_hist,
-                         cost_ensemble_hist=self.cost_ensemble_hist,
-                         cost_ensemble_sigma_hist=self.cost_ensemble_sigma_hist,
-                         cost_ensemble_ctrl_hist=self.cost_ensemble_ctrl_hist,
-                         cost_ensemble_ctrl_sigma_hist=self.cost_ensemble_ctrl_sigma_hist,
-                         best_cost_hist=self.best_cost_hist,
-                         ctrlVarCoeff_mu_hist=self.ctrlVarCoeff_mu_hist,
-                         ctrlVarCoeff_sigma_hist=self.ctrlVarCoeff_sigma_hist,
-                         corr_f_hist=self.corr_f_hist,
-                         x_bounded_norm_hist=self.x_bounded_norm_hist,
-                         eta_sched_hist=self.eta_sched_hist,
-                         time_hist=self.time_hist,
-                         n_iter=self.n_iter,
-                         adam_iter=adam_iter,
-                         x_bounded_norm_ref=x_bounded_norm_ref,
-                         )
-                         
-                np.savez(self.output_filename + "_GEGD_density_hist",
-                         mu_fp_hist=self.mu_fp_hist,
-                         sigma_hist=self.sigma_hist,
-                         sigma_fp_hist=self.sigma_fp_hist,
-                         x_latent_hist=self.x_latent_hist,
-                         best_x_hist=self.best_x_hist,
-                         corr_mu_hist=self.corr_mu_hist,
-                         corr_sigma_hist=self.corr_sigma_hist,
-                         x_bounded=x_bounded,
-                         jac_mean=jac_mean,
-                         jac_var=jac_var,
-                         )
+                mu_fp_hist_final = self.mu_fp_hist[-1,:]
+                x_latent_final = self.x_latent_hist[-1,:]
+                best_x_final = self.best_x_hist[-1,:]
+
+            np.savez(self.output_filename + "_GEGD_results",
+                     N_high_fidelity_hist=self.N_high_fidelity_hist,
+                     N_low_fidelity_hist=self.N_low_fidelity_hist,
+                     var_reduction_hist=self.var_reduction_hist,
+                     N_eff_hist=self.N_eff_hist,
+                     mean_fs_solid_hist=self.mean_fs_solid_hist,
+                     mean_fs_void_hist=self.mean_fs_void_hist,
+                     topoIPR_Betti_hist=self.topoIPR_Betti_hist,
+                     topoIPR_graph_hist=self.topoIPR_graph_hist,
+                     mean_pairwise_Hamming_dist_hist=self.mean_pairwise_Hamming_dist_hist,
+                     cost_ensemble_hist=self.cost_ensemble_hist,
+                     cost_ensemble_sigma_hist=self.cost_ensemble_sigma_hist,
+                     cost_ensemble_ctrl_hist=self.cost_ensemble_ctrl_hist,
+                     cost_ensemble_ctrl_sigma_hist=self.cost_ensemble_ctrl_sigma_hist,
+                     best_cost_hist=self.best_cost_hist,
+                     ctrlVarCoeff_mu_hist=self.ctrlVarCoeff_mu_hist,
+                     ctrlVarCoeff_sigma_hist=self.ctrlVarCoeff_sigma_hist,
+                     corr_f_hist=self.corr_f_hist,
+                     x_bounded_norm_hist=self.x_bounded_norm_hist,
+                     eta_sched_hist=self.eta_sched_hist,
+                     time_hist=self.time_hist,
+                     sigma_hist=self.sigma_hist,
+                     n_iter=self.n_iter,
+                     mu_fp_hist_final=mu_fp_hist_final,
+                     x_latent_final=x_latent_final,
+                     best_x_final=best_x_final,
+                     adam_iter=adam_iter,
+                     x_bounded_norm_ref=x_bounded_norm_ref,
+                     )
+                        
+            np.savez(self.output_filename + "_GEGD_density_hist",
+                     mu_fp_hist=self.mu_fp_hist,
+                     sigma_fp_hist=self.sigma_fp_hist,
+                     x_sample_hist=self.x_sample_hist,
+                     x_latent_hist=self.x_latent_hist,
+                     best_x_hist=self.best_x_hist,
+                     corr_mu_hist=self.corr_mu_hist,
+                     corr_sigma_hist=self.corr_sigma_hist,
+                     x_bounded=x_bounded,
+                     jac_mean=jac_mean,
+                     jac_var=jac_var,
+                     )
 
     def sample_cost_fct_landscape(self, output_filename, Nensemble, r_CV, dx1, dx2, Ngrid1interp, Ngrid2interp, Ngrid1, Ngrid2, read_save_data=False, zoom=1):
         if comm.rank == 0:
