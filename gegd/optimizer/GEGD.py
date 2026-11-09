@@ -645,11 +645,6 @@ class optimizer:
 
             jac[ub==lb] = 0
             jac[mask_bound] *= np.exp(-x[mask_bound])*(ub[mask_bound] - lb[mask_bound])/(1 + np.exp(-x[mask_bound]))**2
-            
-            # Compute Minimum Feature Size
-            fs_solid, fs_void = get_feature_size_distribution(x_best, self.Nx * self.upsample_ratio, self.Ny * self.upsample_ratio, self.periodic)
-            mean_fs_solid = np.mean(fs_solid[fs_solid > 0])
-            mean_fs_void = np.mean(fs_void[fs_void > 0])
 
             # Compute Ensemble Stats
             _, topoIPR_Betti = Betti_numbers(x_sample, self.Nx * self.upsample_ratio, self.Ny * self.upsample_ratio, self.periodic)
@@ -661,8 +656,6 @@ class optimizer:
             self.var_reduction_hist = np.append(self.var_reduction_hist, var_reduction)
             self.N_eff_hist = np.append(self.N_eff_hist, int(1/var_reduction))
             
-            self.mean_fs_solid_hist = np.append(self.mean_fs_solid_hist, mean_fs_solid)
-            self.mean_fs_void_hist = np.append(self.mean_fs_void_hist, mean_fs_void)
             self.topoIPR_Betti_hist = np.append(self.topoIPR_Betti_hist, topoIPR_Betti)
             self.topoIPR_graph_hist = np.append(self.topoIPR_graph_hist, topoIPR_graph)
             self.mean_pairwise_Hamming_dist_hist = np.append(self.mean_pairwise_Hamming_dist_hist, mean_pairwise_Hamming_dist)
@@ -706,14 +699,25 @@ class optimizer:
             x_best = x_best.astype(np.uint8)
             if self.best_x_hist is None:
                 self.best_x_hist = x_best.copy()
+                best_x = x_best.copy()
             else:
                 if new_best:
                     self.best_x_hist = np.vstack((self.best_x_hist, x_best))
+                    best_x = x_best.copy()
                 else:
                     if self.best_x_hist.ndim == 1:
                         self.best_x_hist = np.vstack((self.best_x_hist, self.best_x_hist))
                     else:
                         self.best_x_hist = np.vstack((self.best_x_hist, self.best_x_hist[-1,:]))
+                    best_x = self.best_x_hist[-1,:]
+            
+            # Compute Minimum Feature Size
+            fs_solid, fs_void = get_feature_size_distribution(best_x, self.Nx * self.upsample_ratio, self.Ny * self.upsample_ratio, self.periodic)
+            mean_fs_solid = np.mean(fs_solid[fs_solid > 0])
+            mean_fs_void = np.mean(fs_void[fs_void > 0])
+
+            self.mean_fs_solid_hist = np.append(self.mean_fs_solid_hist, mean_fs_solid)
+            self.mean_fs_void_hist = np.append(self.mean_fs_void_hist, mean_fs_void)
             
             self.cost_ensemble_hist = np.append(self.cost_ensemble_hist, loss_mean)
             self.cost_ensemble_sigma_hist = np.append(self.cost_ensemble_sigma_hist, loss_std)
@@ -765,7 +769,7 @@ class optimizer:
             degree_of_binarization = np.max((np.mean(mu_fp[mu_fp >= 0]), np.mean(-mu_fp[mu_fp <= 0])))
             
             if comm.rank == 0:
-                print('    | %4d |  %3d/%3d | %5.3f | %4.2f/%4.2f |  %6.4f/%6.4f | %8.6f |  %4.2f/%4.2f |  %9.2f/%9.2f  | %11.2f |' %(
+                print('    | %4d | %3d/%4d | %5.3f | %4.2f/%4.2f |  %6.3f/%6.3f | %8.5f |  %4.1f/%4.1f |  %9.2f/%9.2f | %11.2f |' %(
                     self.n_iter,
                     self.Nensemble,
                     self.r_CV*self.Nensemble,

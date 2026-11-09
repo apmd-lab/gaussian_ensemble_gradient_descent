@@ -3,8 +3,8 @@ directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
 #sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
-#sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
-sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent')
+sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
+#sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent')
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -52,8 +52,9 @@ Nx = args.Nx
 Ny = args.Ny
 symmetry = args.symmetry # Currently supported: (None), (D1,2,4)
 periodic = 0
-brush_size = args.brush_size # minimum feature size in pixels
+min_feature_size = args.min_feature_size # minimum feature size in pixels
 upsample_ratio = args.upsample_ratio
+feasible_design_generation_method = 'brush'
 
 # Define Cost Object
 #--------------------------------------------------------------------------
@@ -63,38 +64,34 @@ upsample_ratio = args.upsample_ratio
 #--------------------------------------------------------------------------
 import FDTD_functions.mode_converter_ceviche as objfun
 
-c = 299792458
-um = 1e-6
-nm = 1e-9
+lam_tgt = 1.55
+mode_in = 1
+mode_out = 4
 
-lam_tgt = 1.55*um
+design_dim = np.array([1.0*lam_tgt,1.0*lam_tgt])
+waveguide_width = 1.0 # in um
 
-design_dim = np.array([1*(Nx/Ny)*lam_tgt,1*lam_tgt,400*nm])
-waveguide_width = 0.5*um
-
-dpix = design_dim[0]/Nx
+dpix = design_dim[1]/Ny
 waveguide_width_npix = np.round(waveguide_width/dpix)
-if waveguide_width_npix < brush_size:
+if waveguide_width_npix < min_feature_size:
     print('\t!!! Waveguide width smaller than the minimum feature size !!!', flush=True)
     assert False
-if Nx % 2 == 0:
+if Ny % 2 == 0:
     waveguide_width_npix += (waveguide_width_npix % 2)*np.sign(waveguide_width/dpix - waveguide_width_npix)
 else:
     waveguide_width_npix += (waveguide_width_npix % 2 == 0)*np.sign(waveguide_width/dpix - waveguide_width_npix)
 waveguide_halfwidth_npix = int(np.floor(waveguide_width_npix/2 + 0.5))
-center_x = int(np.floor(Nx/2 + 0.5))
-waveguide_bottom = int(center_x - waveguide_halfwidth_npix)
+center_y = int(np.floor(Ny/2 + 0.5))
+waveguide_bottom = int(center_y - waveguide_halfwidth_npix)
 waveguide_top = int(waveguide_bottom + waveguide_width_npix)
 
-padding = -np.ones((Nx + 2*brush_size, Ny + 2*brush_size))
-padding[brush_size:-brush_size,brush_size:-brush_size] = 0
-padding[waveguide_bottom + brush_size:waveguide_top + brush_size,:brush_size] = 1
-padding[waveguide_bottom + brush_size:waveguide_top + brush_size,-brush_size:] = 1
+padding = -np.ones((Nx + 2*min_feature_size, Ny + 2*min_feature_size))
+padding[min_feature_size:-min_feature_size,min_feature_size:-min_feature_size] = 0
+padding[:min_feature_size,waveguide_bottom + min_feature_size:waveguide_top + min_feature_size] = 1
+padding[-min_feature_size:,waveguide_bottom + min_feature_size:waveguide_top + min_feature_size] = 1
 
 mat_padding = 'SiO2_bulk'
 mat_waveguide = 'Si_Schinke_Shkondin'
-
-fsp_suffix = args.optimizer + str(args.n_seed)
 
 cost_obj_high_fidelity = objfun.custom_objective(
     lam_tgt, # in um
@@ -104,6 +101,8 @@ cost_obj_high_fidelity = objfun.custom_objective(
     waveguide_width, # in um
     mat_padding,
     mat_waveguide,
+    mode_in,
+    mode_out,
 )
 
 cost_obj_low_fidelity = objfun.custom_objective(
@@ -114,6 +113,8 @@ cost_obj_low_fidelity = objfun.custom_objective(
     waveguide_width, # in um
     mat_padding,
     mat_waveguide,
+    mode_in,
+    mode_out,
 )
 
 # Optimizer Settings
@@ -122,12 +123,12 @@ cost_obj_low_fidelity = objfun.custom_objective(
 # high-fidelity: accuracy required for actual application
 # low-fidelity: faster and less accurate, but accurate enough to ensure high correlation with the high-fidelity simulations
 #--------------------------------------------------------------------------------------------------------------------------
-low_fidelity_setting = 2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-high_fidelity_setting = 5 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-t_low_fidelity = 0.18 # low-fidelity simulation time in seconds
-t_high_fidelity = 1.45 # high-fidelity simulation time in seconds
+low_fidelity_setting = 1.4 #1 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+high_fidelity_setting = 4 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
+t_low_fidelity = 0.67 #0.28 # low-fidelity simulation time in seconds
+t_high_fidelity = 8.65 # high-fidelity simulation time in seconds
 t_iteration = t_high_fidelity*Nensemble # target time per optimization iteration in seconds (actual time may be slightly longer due to the brush generator)
-t_fwd_AD = 1.61
+t_fwd_AD = 25.45
 
 cost_obj_high_fidelity.set_accuracy(high_fidelity_setting)
 cost_obj_low_fidelity.set_accuracy(low_fidelity_setting)
@@ -135,7 +136,7 @@ cost_obj_low_fidelity.set_accuracy(low_fidelity_setting)
 if optimization_algorithm == 'TF_BFGS':
     Ntrial = Nensemble #int(np.round(Nensemble/(t_fwd_AD/t_high_fidelity)))
 
-    output_filename = 'polarization_beamsplitter_IPR' + str(int(1/IPR_exponent)) + '_Ntrial' + str(Ntrial) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+    output_filename = 'mode_converter_Ntrial' + str(Ntrial) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
     optimizer = TF_BFGS.optimizer(
@@ -161,7 +162,7 @@ elif optimization_algorithm == 'AF_STE':
     Ntrial = Nensemble #int(np.round(Nensemble/(t_fwd_AD/t_high_fidelity)))
     eta = args.eta
 
-    output_filename = 'polarization_beamsplitter_IPR' + str(int(1/IPR_exponent)) + '_Ntrial' + str(Ntrial) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+    output_filename = 'mode_converter_Ntrial' + str(Ntrial) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_eta' + str(eta) + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
     optimizer = AF_STE.optimizer(
@@ -191,7 +192,7 @@ elif optimization_algorithm == 'GEGD':
     coeff_exp = args.coeff_exp
     cost_threshold = 0.0
 
-    output_filename = 'polarization_beamsplitter_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+    output_filename = 'mode_converter_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_sig_ens' + str(sigma_ensemble) + '_eta' + str(eta) + '_mfs' + str(min_feature_size) + '_exp' + str(coeff_exp) + '_try' + str(n_seed+1)
 
     optimizer = GEGD.optimizer(
@@ -215,6 +216,7 @@ elif optimization_algorithm == 'GEGD':
         cost_threshold=cost_threshold,
         cost_obj_high_fidelity=cost_obj_high_fidelity,
         cost_obj_low_fidelity=cost_obj_low_fidelity,
+        use_momentum=True,
         use_ctrlVar=True,
         Nthreads=Nthreads,
         cuda_ind=cuda_ind,
@@ -231,7 +233,7 @@ elif optimization_algorithm == 'PSO':
     coeff_social = 1.49
     coeff_inertia = 0.9
 
-    output_filename = 'polarization_beamsplitter_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+    output_filename = 'mode_converter_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
     optimizer = PSO.optimizer(
@@ -257,7 +259,7 @@ elif optimization_algorithm == 'PSO':
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
 elif optimization_algorithm == 'GA':
-    output_filename = 'polarization_beamsplitter_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+    output_filename = 'mode_converter_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
     optimizer = GA.optimizer(
@@ -283,7 +285,7 @@ elif optimization_algorithm == 'GA':
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
 elif optimization_algorithm == 'sep_CMA_ES':
-    output_filename = 'polarization_beamsplitter_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+    output_filename = 'mode_converter_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
     optimizer = sep_CMA_ES.optimizer(
@@ -309,7 +311,7 @@ elif optimization_algorithm == 'sep_CMA_ES':
     print('\n### Total time: ' + str(T2 - T1), flush=True)
 
 elif optimization_algorithm == 'CMA_ES':
-    output_filename = 'polarization_beamsplitter_IPR' + str(int(1/IPR_exponent)) + '_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
+    output_filename = 'mode_converter_Nensemble' + str(Nensemble) + '_Ndim' + str(Nx) + 'x' + str(Ny) + '_D' + str(symmetry) \
         + '_mfs' + str(min_feature_size) + '_try' + str(n_seed+1)
 
     optimizer = CMA_ES.optimizer(

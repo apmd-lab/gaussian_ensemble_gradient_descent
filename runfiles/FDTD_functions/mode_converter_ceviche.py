@@ -37,6 +37,8 @@ class custom_objective:
                  waveguide_width, # in um
                  mat_padding,
                  mat_waveguide,
+                 mode_in,
+                 mode_out,
                  total_sim_time=1e3 # in fs
                  ):
     
@@ -58,6 +60,8 @@ class custom_objective:
 
         # Other Simulation Settings
         self.pml_size = self.lam_tgt
+        self.mode_in = mode_in
+        self.mode_out = mode_out
         self.total_sim_time = total_sim_time*fs
         
     def set_accuracy(self, upsampling_ratio):
@@ -129,7 +133,7 @@ class custom_objective:
             self.source_plane.x,
             self.source_plane.y,
             eps,
-            m=1,
+            m=self.mode_in,
         )
         
         # Monitor
@@ -144,11 +148,14 @@ class custom_objective:
             self.monitor_plane.x,
             self.monitor_plane.y,
             eps,
-            m=2,
+            m=self.mode_out,
         )
         
         # Simulation
         self.simulation = fdfd_ez(omega, 1/self.resolution, eps, [self.Npml, self.Npml])
+
+        ### Bilinear Interpolation Matrices (grayscale only)
+        self.Wx, self.Wy = self.bilinear_interpolation()
     
     def visualize(self, Ez, eps):
         fig, ax = plt.subplots(1, 2, constrained_layout=True, figsize=(6,3))
@@ -166,11 +173,14 @@ class custom_objective:
         self.simulation.eps_r = eps
         _,_, Ez = self.simulation.solve(self.source)
     
-        numer = npa.abs(npa.sum(npa.conj(Ez)*self.monitor))
-        denom = npa.sqrt(npa.abs(npa.sum(npa.conj(Ez)*Ez))\
-                        *npa.abs(npa.sum(npa.conj(self.monitor)*self.monitor)))
+        Ez_slice = Ez[self.monitor_plane.x, self.monitor_plane.y]
+        mon_slice = self.monitor[self.monitor_plane.x, self.monitor_plane.y]
+
+        numer = npa.abs(npa.sum(npa.conj(Ez_slice)*mon_slice))
+        denom = npa.sqrt(npa.abs(npa.sum(npa.conj(Ez_slice)*Ez_slice))\
+                        *npa.abs(npa.sum(npa.conj(mon_slice)*mon_slice)))
         
-        cost = -numer/denom
+        cost = -numer/(denom + 1e-12)
         
 #        print(npa.abs(npa.sum(npa.conj(Ez)*self.monitor)), flush=True)
 #        print(npa.abs(npa.sum(npa.conj(Ez)*Ez)), flush=True)
@@ -182,8 +192,37 @@ class custom_objective:
         
         return cost
     
+    def bilinear_interpolation(self):
+        coords_x = (np.arange(self.Nx_up) + 0.5) / self.upsampling_ratio - 0.5
+        coords_y = (np.arange(self.Ny_up) + 0.5) / self.upsampling_ratio - 0.5
+        coords_x = np.clip(coords_x, 0, self.Nx - 1)
+        coords_y = np.clip(coords_y, 0, self.Ny - 1)
+        
+        ix0 = np.floor(coords_x).astype(int)
+        iy0 = np.floor(coords_y).astype(int)
+        ix1 = np.clip(ix0 + 1, 0, self.Nx - 1)
+        iy1 = np.clip(iy0 + 1, 0, self.Ny - 1)
+
+        wx = coords_x - ix0
+        wy = coords_y - iy0
+
+        Wx = np.zeros((self.Nx_up, self.Nx), dtype=np.float64)
+        for j in range(self.Nx_up):
+            Wx[j, ix0[j]] += 1.0 - wx[j]
+            Wx[j, ix1[j]] += wx[j]
+
+        Wy = np.zeros((self.Ny_up, self.Ny), dtype=np.float64)
+        for j in range(self.Ny_up):
+            Wy[j, iy0[j]] += 1.0 - wy[j]
+            Wy[j, iy1[j]] += wy[j]
+        
+        return Wx, Wy
+
     def get_cost(self, x, get_grad=False):
-        x_upsampled = np.where(gaussian_filter(zoom(x.reshape(self.Nx, self.Ny).astype(np.float64), (self.Nx_up/self.Nx, self.Ny_up/self.Ny), order=1, mode='nearest'), sigma=self.upsampling_ratio, mode='nearest') > 0.5, 1, 0)
+        if np.all((x == 0) + (x == 1)):
+            x_upsampled = np.where(gaussian_filter(zoom(x.reshape(self.Nx, self.Ny).astype(np.float64), (self.Nx_up/self.Nx, self.Ny_up/self.Ny), order=1, mode='nearest'), sigma=self.upsampling_ratio, mode='nearest') > 0.5, 1, 0)
+        else:
+            x_upsampled = self.Wx @ x.reshape(self.Nx, self.Ny) @ self.Wy.T
         
         density_design = npa.zeros_like(self.density_background).astype(npa.float64)
         density_design[
@@ -194,12 +233,14 @@ class custom_objective:
         cost = self.cost(density_design)
         
         if get_grad:
-            jac = jacobian(self.cost, mode='reverse')(density_design)
-            jac = jac[0,:].reshape(density_design.shape)
-            jac = jac[
+            jac_upsampled = jacobian(self.cost, mode='reverse')(density_design)
+            jac_upsampled = jac_upsampled[0,:].reshape(density_design.shape)
+            jac_upsampled = jac_upsampled[
                 self.Npml+2*self.Nlam_half:-self.Npml-2*self.Nlam_half,
                 self.Npml+self.Nlam_half:-self.Npml-self.Nlam_half,
             ]
+            jac = self.Wx.T @ jac_upsampled @ self.Wy
+            
 #            np.savez(directory + '/debug_jacobian', jac=jac)
 #            assert False
             

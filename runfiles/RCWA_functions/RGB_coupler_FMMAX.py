@@ -3,6 +3,7 @@ directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
 #sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent/runfiles')
+sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent')
 sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent/runfiles')
 
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -281,6 +282,11 @@ class custom_objective:
             T_tgt = transmitted_power[jnp.arange(self.n_freq), self.idx_tgt + self.basis_expansion.num_terms, 0]
 
         # Field Visualization
+        x = 0
+        y = 0
+        z = 0
+        E_in_plane = 0
+        '''
         thicknesses = [1.0, self.thickness_pattern, 4.0]
 
         s_matrices_interior = scattering.stack_s_matrices_interior(
@@ -303,7 +309,7 @@ class custom_objective:
             amplitudes_interior=amplitudes_interior,
             layer_solve_results=layer_solve_results,
             layer_thicknesses=thicknesses,
-            layer_znum=[int(jnp.ceil(t / 0.05)) for t in thicknesses],
+            layer_znum=[int(jnp.ceil(t / 0.01)) for t in thicknesses],
             x=x,
             y=y,
         )
@@ -315,5 +321,6 @@ class custom_objective:
         x = jax.device_get(x)
         y = jax.device_get(y)
         z = jax.device_get(z)
+        '''
 
         return T_tgt, E_in_plane, x, y, z, transmitted_power, self.incident_power, self.coeffs

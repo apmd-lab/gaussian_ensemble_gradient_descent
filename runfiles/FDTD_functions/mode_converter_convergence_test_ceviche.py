@@ -46,9 +46,11 @@ elif symmetry == 4:
 import mode_converter_ceviche as objfun
 
 lam_tgt = 1.55
+mode_in = 1
+mode_out = 4
 
 design_dim = np.array([1*lam_tgt,1*lam_tgt])
-waveguide_width = 0.5 # in um
+waveguide_width = 1.0 # in um
 
 dpix = design_dim[1]/Ny
 waveguide_width_npix = np.round(waveguide_width/dpix)
@@ -80,6 +82,8 @@ cost_obj = objfun.custom_objective(
     waveguide_width, # in um
     mat_padding,
     mat_waveguide,
+    mode_in,
+    mode_out,
 )
 
 # Convergence Test

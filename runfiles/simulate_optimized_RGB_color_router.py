@@ -2,8 +2,8 @@ import os
 directory = os.path.dirname(os.path.realpath(__file__))
 import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
-#sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
-sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent')
+sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
+#sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent')
 
 import gc
 import jax
@@ -51,7 +51,7 @@ thickness_pattern = 0.7
 thickness_substrate = 1.0
 
 mat_background = np.array(['Air']) # background (incident side)
-mat_pattern = np.array(['Air','TiO2_Sarkar']) # Low RI, High RI
+mat_pattern = np.array(['Air','Si3N4_Luke']) # Low RI, High RI
 mat_substrate = np.array(['Si_Schinke_Shkondin'])
 
 # Optimizer Settings
@@ -62,15 +62,15 @@ mat_substrate = np.array(['Si_Schinke_Shkondin'])
 #--------------------------------------------------------------------------------------------------------------------------
 low_fidelity_setting = 18**2 # low-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
 high_fidelity_setting = 40**2 # high-fidelity simulation setting (e.g. RCWA: number of harmonics, FDTD: mesh density, etc.)
-t_low_fidelity = 1.13 # low-fidelity simulation time in seconds
-t_high_fidelity = 10.30 # high-fidelity simulation time in seconds
-t_fwd_AD = 11.89
+t_low_fidelity = 0.52 # low-fidelity simulation time in seconds
+t_high_fidelity = 6.06 # high-fidelity simulation time in seconds
+t_fwd_AD = 6.78
 N_convergence = 100
 
 data_dir = "/RCWA_functions/RGB_color_router/run_until_convergence"
 
 # Process wavelengths in chunks to limit GPU memory usage
-lam_chunk_size = 9
+lam_chunk_size = 6
 
 def simulate_chunked(design, upsampling_ratio_arg):
     """Run get_diffraction_and_fields over lam in chunks and concatenate results."""
@@ -158,11 +158,11 @@ print(' --> Best Cost (idx=',idx_best+1,'): ',cost_all_GEGD[idx_best], flush=Tru
 with np.load(directory + data_dir + "/GEGD/RGB_color_router_IPR1_Nensemble20_Ndim100x100_D3_sig_ens0.01_eta5e-05_mfs7_exp20_try" + str(idx_best + 1) + "_GEGD_density_hist.npz") as data:
     x = data['best_x_hist'][int(convergence_iter_GEGD[idx_best]),:].reshape(Nx, Ny)
 
-print('\n\t  Simulating native resolution...', flush=True)
-flux, R_flux, G_flux, B_flux, incident_flux = simulate_chunked(x, 1)
 x_up = np.where(gaussian_filter(zoom(x.astype(np.float64), upsampling_ratio, order=1, mode='wrap'), sigma=upsampling_ratio, mode='wrap') > 0.5, 1, 0)
 print('\n\t  Simulating upsampled resolution...', flush=True)
 flux_up, R_flux_up, G_flux_up, B_flux_up, incident_flux_up = simulate_chunked(x_up, upsampling_ratio)
+print('\n\t  Simulating native resolution...', flush=True)
+flux, R_flux, G_flux, B_flux, incident_flux = simulate_chunked(x, 1)
 
 print('\n\t*TF-BFGS', end='', flush=True)
 cost_all_BFGS = np.zeros(10)
@@ -247,7 +247,6 @@ np.savez(directory + data_dir + '/RGB_color_router_IPR1_Nensemble20_Ndim100x100_
     convergence_rate_GEGD=convergence_rate_GEGD,
     convergence_rate_sep_CMA_ES=convergence_rate_sep_CMA_ES,
     convergence_rate_GA=convergence_rate_GA,
-    convergence_rate_AF_STE=convergence_rate_AF_STE,
     lam=lam,
     x=x,
     x_up=x_up,

@@ -11,7 +11,7 @@ def pairwise_Hamming_distance(x_sample):
     N = x_sample.shape[0]
     p = np.mean(x_sample, axis=0)
     var = p * (1 - p)
-    dist = (2 * N / (N - 1)) * np.mean(var, axis=0)
+    dist = 2 * np.mean(var, axis=0)
     return dist, var
 
 def _count_connected_components(img, periodic):

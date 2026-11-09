@@ -4,8 +4,7 @@ import sys
 #sys.path.append('/home/minseokhwan/gaussian_ensemble_gradient_descent')
 #sys.path.append('/home/apmd/minseokhwan/gaussian_ensemble_gradient_descent')
 #sys.path.append('/ocean/projects/cis260139p/smin2/gaussian_ensemble_gradient_descent/runfiles')
-#sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
-sys.path.append('/u/smin2/gaussian_ensemble_gradient_descent')
+sys.path.append('/home/fs01/sm3266/gaussian_ensemble_gradient_descent')
 
 import numpy as np
 from scipy.ndimage import gaussian_filter, zoom
@@ -126,7 +125,7 @@ with np.load(directory + data_dir + "/GEGD/RGB_coupler_IPR1_Nensemble20_Ndim60x2
 
 T_tgt, E_in_plane, x_grid, y_grid, z_grid, transmitted_power, incident_power, coeffs = cost_obj.get_diffraction_and_fields(x, 1)
 x_up = np.where(gaussian_filter(zoom(x.astype(np.float64), upsampling_ratio, order=1, mode='wrap'), sigma=upsampling_ratio, mode='wrap') > 0.5, 1, 0)
-#T_tgt_up, E_in_plane_up, x_grid_up, y_grid_up, z_grid_up, transmitted_power_up, incident_power_up, coeffs_up = cost_obj_upsampled.get_diffraction_and_fields(x_up, upsampling_ratio)
+T_tgt_up, E_in_plane_up, x_grid_up, y_grid_up, z_grid_up, transmitted_power_up, incident_power_up, coeffs_up = cost_obj_upsampled.get_diffraction_and_fields(x_up, upsampling_ratio)
 
 print('\n\t*TF-BFGS', end='', flush=True)
 cost_all_BFGS = np.zeros(10)
